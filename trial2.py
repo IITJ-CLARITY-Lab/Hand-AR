@@ -1,3 +1,4 @@
+from turtle import color
 from ursina import *
 import cv2
 import mediapipe as mp
@@ -6,6 +7,8 @@ import numpy as np
 import datetime
 import os
 import sys
+from PIL import Image
+import time
 
 selected_model = None
 if len(sys.argv) > 1:
@@ -104,9 +107,64 @@ smooth_zoom = 0
 paused = False
 PAUSE_FRAMES = 0
 
+# --- UI ELEMENTS ---
+
+# 1. Camera Feed (Bottom Center)
+camera_feed_view = Entity(
+    parent=camera.ui,
+    model='quad',
+    scale=(0.4, 0.25),
+    position=(0, -0.35),
+    texture=Texture(Image.new('RGB', (640, 480))),
+    origin=(0, 0)
+)
+
+# 2. Gesture Display
+gesture_text = Text(
+    text="GESTURE: NONE",
+    parent=camera.ui,
+    position=(0, 0.45), # Adjusted to be above the feed
+    origin=(0, 0),
+    scale=1.5,
+    color=color.yellow
+)
+
+# 3. Persistent Instructions (Left Side)
+Text(
+    text="""
+    <orange>CONTROLS</orange>
+    <b>RIGHT HAND</b>
+    • Index: Rotate
+    • Pinch: Zoom
+    • Peace: Shot (Paused)
+    • Thumb Up: Reset (Paused)
+
+    <b>LEFT HAND</b>
+    • Wrist: Move
+    • Palm: Pause
+    """,
+    parent=camera.ui,
+    position=(-0.85, 0.2),
+    scale=0.75
+)
+
+# 4. FPS Counter (Top Right)
+fps_text = Text(
+    text="FPS: 0",
+    parent=camera.ui,
+    position=(0.75, 0.48),
+    color=color.lime
+)
+
+# Initialize MediaPipe Drawing for the feed
+mp_drawing = mp.solutions.drawing_utils
+
 def update():
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry
-    global smooth_tx, smooth_ty, last_zoom, smooth_zoom, PAUSE_FRAMES
+    global smooth_tx, smooth_ty, last_zoom, smooth_zoom, PAUSE_FRAMES, paused
+
+    # 1. ALWAYS UPDATE FPS (Top level of update)
+    fps_text.text = f"FPS: {int(1/time.dt if time.dt > 0 else 0)}"
 
     ok, frame = cap.read()
     if not ok:
@@ -115,63 +173,92 @@ def update():
     frame = cv2.flip(frame, 1)
     res = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
+    # Identify hands based on MediaPipe's classification
     left = right = None
     if res.multi_hand_landmarks and res.multi_handedness:
-        for i,h in enumerate(res.multi_handedness):
+        for i, h in enumerate(res.multi_handedness):
+            # NOTE: MediaPipe 'Left' is usually the user's right hand in a flipped view
+            # If your controls feel swapped, swap "Left" and "Right" in the strings below
             if h.classification[0].label == "Left":
                 left = res.multi_hand_landmarks[i]
             else:
                 right = res.multi_hand_landmarks[i]
 
+    # 2. PAUSE LOGIC (Priority)
     if left and is_open_palm_relaxed(left):
         PAUSE_FRAMES += 1
     else:
         PAUSE_FRAMES = 0
 
-    paused = PAUSE_FRAMES >= 2
+    paused = PAUSE_FRAMES >= 3 # Using 3 for better stability
+    current_gest = "NONE"
 
     h, w, _ = frame.shape
 
-    # rotation
-    if right and not paused and not model_locked:
-        ix = int(right.landmark[8].x * w)
-        iy = int(right.landmark[8].y * h)
-        if last_rx is not None:
-            dx, dy = ix-last_rx, iy-last_ry
-            smooth_rx = smooth_rx*(1-alpha) + (-dy*2)*alpha
-            smooth_ry = smooth_ry*(1-alpha) + (dx*2)*alpha
-            car.rotation_x += smooth_rx
-            car.rotation_y += smooth_ry
-        last_rx, last_ry = ix, iy
+    # 3. GESTURE HIERARCHY
+    if paused:
+        current_gest = "SYSTEM PAUSED"
+        # Reset tracking variables so we don't 'snap' when unpausing
+        last_rx = last_ry = last_lx = last_ly = last_zoom = None
     else:
-        last_rx = last_ry = None
+        # --- ROTATION (Right Hand) ---
+        if right and not model_locked:
+            current_gest = "ROTATING (RIGHT)"
+            ix = int(right.landmark[8].x * w)
+            iy = int(right.landmark[8].y * h)
+            if last_rx is not None:
+                dx, dy = ix-last_rx, iy-last_ry
+                smooth_rx = smooth_rx*(1-alpha) + (-dy*2)*alpha
+                smooth_ry = smooth_ry*(1-alpha) + (dx*2)*alpha
+                car.rotation_x += smooth_rx
+                car.rotation_y += smooth_ry
+            last_rx, last_ry = ix, iy
+        else:
+            last_rx = last_ry = None
 
-    # zoom
-    if right and not paused and not camera_locked:
-        lm = right.landmark
-        pd = math.dist((lm[4].x,lm[4].y),(lm[8].x,lm[8].y))
-        strength = 1 - min(1,max(0,(pd-0.02)/0.15))
-        if last_zoom is not None:
-            delta = (strength-last_zoom)*40
-            smooth_zoom = smooth_zoom*0.65 + delta*0.35
-            camera.z = clamp(camera.z - smooth_zoom, -35, -3)
-        last_zoom = strength
-    else:
-        last_zoom = None
+        # --- ZOOM (Right Hand) ---
+        if right and not camera_locked:
+            # If rotating is active, we append zoom to the text
+            if current_gest != "NONE": current_gest += " + ZOOM"
+            else: current_gest = "ZOOMING (RIGHT)"
+            
+            lm = right.landmark
+            pd = math.dist((lm[4].x,lm[4].y),(lm[8].x,lm[8].y))
+            strength = 1 - min(1,max(0,(pd-0.02)/0.15))
+            if last_zoom is not None:
+                delta = (strength-last_zoom)*40
+                smooth_zoom = smooth_zoom*0.65 + delta*0.35
+                camera.z = clamp(camera.z - smooth_zoom, -35, -3)
+            last_zoom = strength
+        else:
+            last_zoom = None
 
-    # translation
-    if left and not paused and not model_locked:
-        lx = int(left.landmark[0].x * w)
-        ly = int(left.landmark[0].y * h)
-        if last_lx is not None:
-            dx = (lx-last_lx)/w
-            dy = (ly-last_ly)/h
-            smooth_tx = smooth_tx*(1-alpha) + dx*15*alpha
-            smooth_ty = smooth_ty*(1-alpha) - dy*15*alpha
-            car.position += Vec3(smooth_tx, smooth_ty, 0)
-        last_lx, last_ly = lx, ly
-    else:
-        last_lx = last_ly = None
+        # --- TRANSLATION (Left Hand) ---
+        if left and not model_locked:
+            current_gest = "MOVING (LEFT)"
+            lx = int(left.landmark[0].x * w)
+            ly = int(left.landmark[0].y * h)
+            if last_lx is not None:
+                dx = (lx-last_lx)/w
+                dy = (ly-last_ly)/h
+                smooth_tx = smooth_tx*(1-alpha) + dx*15*alpha
+                smooth_ty = smooth_ty*(1-alpha) - dy*15*alpha
+                car.position += Vec3(smooth_tx, smooth_ty, 0)
+            last_lx, last_ly = lx, ly
+        else:
+            last_lx = last_ly = None
+
+    # 4. UI REFRESH (Bottom of update)
+    gesture_text.text = f"GESTURE: {current_gest}"
+
+    # Draw landmarks on the frame before sending to the UI feed
+    if res.multi_hand_landmarks:
+        for hand_lms in res.multi_hand_landmarks:
+            mp_drawing.draw_landmarks(frame, hand_lms, mp_hands.HAND_CONNECTIONS)
+
+    # Update the camera feed texture
+    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    camera_feed_view.texture = Texture(img)
 
 app.run()
 cap.release()
