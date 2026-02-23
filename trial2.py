@@ -9,6 +9,7 @@ import os
 import sys
 from PIL import Image
 import time
+from panda3d.core import Texture as P3DTexture
 
 selected_model = None
 if len(sys.argv) > 1:
@@ -39,11 +40,9 @@ if size > 0:
 camera.position = Vec3(0, 0, -12)
 camera.look_at(car.position)
 
-
 model_locked = False
 camera_locked = False
 view_mode = "free"
-
 
 def toggle_model_lock():
     global model_locked
@@ -60,7 +59,6 @@ def set_view(mode):
     view_mode = mode
     camera_locked = True
     cam_btn.text = "CAM LOCK: ON"
-
     if mode == "front":
         camera.position = Vec3(0, 0, -12)
     elif mode == "side":
@@ -69,7 +67,6 @@ def set_view(mode):
         camera.position = Vec3(0, 12, 0)
     elif mode == "iso":
         camera.position = Vec3(8, 6, -8)
-
     camera.look_at(car.position)
 
 model_btn = Button("MODEL LOCK: OFF", scale=(0.25, 0.07), position=(-0.6, 0.45), on_click=toggle_model_lock)
@@ -81,14 +78,38 @@ Button("TOP",   scale=(0.12,0.06), position=(0.6,0.25), on_click=lambda: set_vie
 Button("ISO",   scale=(0.12,0.06), position=(0.6,0.15), on_click=lambda: set_view("iso"))
 
 mp_hands = mp.solutions.hands
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
 hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.8, min_tracking_confidence=0.8)
 cap = cv2.VideoCapture(0)
 
+# --- Pre-create a reusable Panda3D texture for the camera feed ---
+# We bypass Ursina's Texture() constructor (which tries to load a file from disk)
+# and work directly with Panda3D's texture API instead.
+FEED_W, FEED_H = 320, 240  # Smaller resolution = much faster texture uploads
+
+_p3d_tex = P3DTexture('camera_feed')
+_p3d_tex.setup2dTexture(FEED_W, FEED_H, P3DTexture.TUnsignedByte, P3DTexture.FRgb)
+_p3d_tex.setMagfilter(P3DTexture.FTLinear)
+_p3d_tex.setMinfilter(P3DTexture.FTLinear)
+# Seed with a black frame so the RAM image buffer is allocated
+buf = _p3d_tex.modifyRamImage()
+memoryview(buf).cast('B')[:] = b'\x00' * (FEED_W * FEED_H * 3)
+
+def _upload_frame(rgb_frame):
+    """Efficiently upload an OpenCV RGB frame into the reusable Panda3D texture."""
+    small = cv2.resize(rgb_frame, (FEED_W, FEED_H), interpolation=cv2.INTER_LINEAR)
+    # Panda3D stores rows bottom-to-top, so flip vertically
+    small = np.flipud(small)
+    small = np.ascontiguousarray(small, dtype=np.uint8)
+    data = small.tobytes()
+    memoryview(_p3d_tex.modifyRamImage()).cast('B')[:] = data
+
 def is_open_palm_relaxed(hand):
     lm = hand.landmark
-    tips = [8,12,16]
-    bases = [5,9,13]
-    return sum(lm[t].y < lm[b].y - 0.01 for t,b in zip(tips,bases)) >= 2
+    tips = [8, 12, 16]
+    bases = [5, 9, 13]
+    return sum(lm[t].y < lm[b].y - 0.01 for t, b in zip(tips, bases)) >= 2
 
 def is_peace(hand):
     lm = hand.landmark
@@ -103,33 +124,54 @@ smooth_rx = smooth_ry = smooth_tx = smooth_ty = 0
 last_rx = last_ry = last_lx = last_ly = None
 last_zoom = None
 smooth_zoom = 0
-
 paused = False
 PAUSE_FRAMES = 0
 
 # --- UI ELEMENTS ---
 
-# 1. Camera Feed (Bottom Center)
+# Camera feed border (slightly larger quad behind the feed)
+Entity(
+    parent=camera.ui,
+    model='quad',
+    scale=(0.42, 0.285),
+    position=(0, -0.35),
+    color=color.cyan,
+    origin=(0, 0),
+    z=0.01
+)
+
+# Camera feed panel — create without texture, then assign the P3D texture directly
+# to the underlying Panda3D node, completely bypassing Ursina's file-loading system.
 camera_feed_view = Entity(
     parent=camera.ui,
     model='quad',
-    scale=(0.4, 0.25),
+    scale=(0.40, 0.27),
     position=(0, -0.35),
-    texture=Texture(Image.new('RGB', (640, 480))),
     origin=(0, 0)
 )
+camera_feed_view.setTexture(_p3d_tex, 1)
 
-# 2. Gesture Display
+# "LIVE" label above the feed
+Text(
+    text="● LIVE",
+    parent=camera.ui,
+    position=(0, -0.205),
+    origin=(0, 0),
+    scale=1.2,
+    color=color.red
+)
+
+# Gesture Display
 gesture_text = Text(
     text="GESTURE: NONE",
     parent=camera.ui,
-    position=(0, 0.45), # Adjusted to be above the feed
+    position=(0, 0.45),
     origin=(0, 0),
     scale=1.5,
     color=color.yellow
 )
 
-# 3. Persistent Instructions (Left Side)
+# Persistent Instructions (Left Side)
 Text(
     text="""
     <orange>CONTROLS</orange>
@@ -148,7 +190,7 @@ Text(
     scale=0.75
 )
 
-# 4. FPS Counter (Top Right)
+# FPS Counter (Top Right)
 fps_text = Text(
     text="FPS: 0",
     parent=camera.ui,
@@ -156,109 +198,137 @@ fps_text = Text(
     color=color.lime
 )
 
-# Initialize MediaPipe Drawing for the feed
-mp_drawing = mp.solutions.drawing_utils
+# Hand label styles — color-coded per hand
+LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),   thickness=2, circle_radius=3)   # Green
+RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50, 150, 255), thickness=2, circle_radius=3)   # Blue
+LEFT_CONN   = mp_drawing.DrawingSpec(color=(0, 180, 0),   thickness=2)
+RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0, 100, 220), thickness=2)
 
 def update():
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry
     global smooth_tx, smooth_ty, last_zoom, smooth_zoom, PAUSE_FRAMES, paused
 
-    # 1. ALWAYS UPDATE FPS (Top level of update)
-    fps_text.text = f"FPS: {int(1/time.dt if time.dt > 0 else 0)}"
+    fps_text.text = f"FPS: {int(1 / time.dt if time.dt > 0 else 0)}"
 
     ok, frame = cap.read()
     if not ok:
         return
 
     frame = cv2.flip(frame, 1)
-    res = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    res = hands.process(rgb)
 
-    # Identify hands based on MediaPipe's classification
+    # Identify hands
     left = right = None
+    left_idx = right_idx = None
     if res.multi_hand_landmarks and res.multi_handedness:
         for i, h in enumerate(res.multi_handedness):
-            # NOTE: MediaPipe 'Left' is usually the user's right hand in a flipped view
-            # If your controls feel swapped, swap "Left" and "Right" in the strings below
             if h.classification[0].label == "Left":
                 left = res.multi_hand_landmarks[i]
+                left_idx = i
             else:
                 right = res.multi_hand_landmarks[i]
+                right_idx = i
 
-    # 2. PAUSE LOGIC (Priority)
+    # Pause logic
     if left and is_open_palm_relaxed(left):
         PAUSE_FRAMES += 1
     else:
         PAUSE_FRAMES = 0
 
-    paused = PAUSE_FRAMES >= 3 # Using 3 for better stability
+    paused = PAUSE_FRAMES >= 3
     current_gest = "NONE"
 
-    h, w, _ = frame.shape
+    h_px, w_px, _ = frame.shape
 
-    # 3. GESTURE HIERARCHY
+    # Gesture hierarchy
     if paused:
         current_gest = "SYSTEM PAUSED"
-        # Reset tracking variables so we don't 'snap' when unpausing
         last_rx = last_ry = last_lx = last_ly = last_zoom = None
     else:
-        # --- ROTATION (Right Hand) ---
+        # Rotation (Right Hand)
         if right and not model_locked:
             current_gest = "ROTATING (RIGHT)"
-            ix = int(right.landmark[8].x * w)
-            iy = int(right.landmark[8].y * h)
+            ix = int(right.landmark[8].x * w_px)
+            iy = int(right.landmark[8].y * h_px)
             if last_rx is not None:
-                dx, dy = ix-last_rx, iy-last_ry
-                smooth_rx = smooth_rx*(1-alpha) + (-dy*2)*alpha
-                smooth_ry = smooth_ry*(1-alpha) + (dx*2)*alpha
+                dx, dy = ix - last_rx, iy - last_ry
+                smooth_rx = smooth_rx * (1 - alpha) + (-dy * 2) * alpha
+                smooth_ry = smooth_ry * (1 - alpha) + (dx * 2) * alpha
                 car.rotation_x += smooth_rx
                 car.rotation_y += smooth_ry
             last_rx, last_ry = ix, iy
         else:
             last_rx = last_ry = None
 
-        # --- ZOOM (Right Hand) ---
+        # Zoom (Right Hand)
         if right and not camera_locked:
-            # If rotating is active, we append zoom to the text
-            if current_gest != "NONE": current_gest += " + ZOOM"
-            else: current_gest = "ZOOMING (RIGHT)"
-            
+            if current_gest != "NONE":
+                current_gest += " + ZOOM"
+            else:
+                current_gest = "ZOOMING (RIGHT)"
             lm = right.landmark
-            pd = math.dist((lm[4].x,lm[4].y),(lm[8].x,lm[8].y))
-            strength = 1 - min(1,max(0,(pd-0.02)/0.15))
+            pd = math.dist((lm[4].x, lm[4].y), (lm[8].x, lm[8].y))
+            strength = 1 - min(1, max(0, (pd - 0.02) / 0.15))
             if last_zoom is not None:
-                delta = (strength-last_zoom)*40
-                smooth_zoom = smooth_zoom*0.65 + delta*0.35
+                delta = (strength - last_zoom) * 40
+                smooth_zoom = smooth_zoom * 0.65 + delta * 0.35
                 camera.z = clamp(camera.z - smooth_zoom, -35, -3)
             last_zoom = strength
         else:
             last_zoom = None
 
-        # --- TRANSLATION (Left Hand) ---
+        # Translation (Left Hand)
         if left and not model_locked:
             current_gest = "MOVING (LEFT)"
-            lx = int(left.landmark[0].x * w)
-            ly = int(left.landmark[0].y * h)
+            lx = int(left.landmark[0].x * w_px)
+            ly = int(left.landmark[0].y * h_px)
             if last_lx is not None:
-                dx = (lx-last_lx)/w
-                dy = (ly-last_ly)/h
-                smooth_tx = smooth_tx*(1-alpha) + dx*15*alpha
-                smooth_ty = smooth_ty*(1-alpha) - dy*15*alpha
+                dx = (lx - last_lx) / w_px
+                dy = (ly - last_ly) / h_px
+                smooth_tx = smooth_tx * (1 - alpha) + dx * 15 * alpha
+                smooth_ty = smooth_ty * (1 - alpha) - dy * 15 * alpha
                 car.position += Vec3(smooth_tx, smooth_ty, 0)
             last_lx, last_ly = lx, ly
         else:
             last_lx = last_ly = None
 
-    # 4. UI REFRESH (Bottom of update)
     gesture_text.text = f"GESTURE: {current_gest}"
 
-    # Draw landmarks on the frame before sending to the UI feed
-    if res.multi_hand_landmarks:
-        for hand_lms in res.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(frame, hand_lms, mp_hands.HAND_CONNECTIONS)
+    # --- Draw color-coded landmarks onto the RGB frame ---
+    if res.multi_hand_landmarks and res.multi_handedness:
+        for i, hand_lms in enumerate(res.multi_hand_landmarks):
+            label = res.multi_handedness[i].classification[0].label
+            if label == "Left":
+                node_style = LEFT_STYLE
+                conn_style = LEFT_CONN
+                # Draw "LEFT" label near wrist
+                wx = int(hand_lms.landmark[0].x * w_px)
+                wy = int(hand_lms.landmark[0].y * h_px)
+                cv2.putText(rgb, "LEFT", (wx - 20, wy + 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 0), 2)
+            else:
+                node_style = RIGHT_STYLE
+                conn_style = RIGHT_CONN
+                wx = int(hand_lms.landmark[0].x * w_px)
+                wy = int(hand_lms.landmark[0].y * h_px)
+                cv2.putText(rgb, "RIGHT", (wx - 20, wy + 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 150, 255), 2)
 
-    # Update the camera feed texture
-    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    camera_feed_view.texture = Texture(img)
+            mp_drawing.draw_landmarks(
+                rgb, hand_lms, mp_hands.HAND_CONNECTIONS,
+                landmark_drawing_spec=node_style,
+                connection_drawing_spec=conn_style
+            )
+
+    # Overlay paused banner directly on the feed
+    if paused:
+        cv2.rectangle(rgb, (0, h_px // 2 - 22), (w_px, h_px // 2 + 22), (20, 20, 20), -1)
+        cv2.putText(rgb, "-- PAUSED --", (w_px // 2 - 95, h_px // 2 + 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 220, 255), 2)
+
+    # Efficiently upload the annotated frame to the GPU texture
+    _upload_frame(rgb)
 
 app.run()
 cap.release()
