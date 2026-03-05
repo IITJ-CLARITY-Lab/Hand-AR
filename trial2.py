@@ -10,6 +10,9 @@ import sys
 from PIL import Image
 import time
 from panda3d.core import Texture as P3DTexture
+from panda3d.core import PNMImage
+
+selected_model = None
 
 selected_model = None
 if len(sys.argv) > 1:
@@ -140,8 +143,7 @@ Entity(
     z=0.01
 )
 
-# Camera feed panel — create without texture, then assign the P3D texture directly
-# to the underlying Panda3D node, completely bypassing Ursina's file-loading system.
+# Camera feed panel - create a basic quad entity
 camera_feed_view = Entity(
     parent=camera.ui,
     model='quad',
@@ -149,7 +151,12 @@ camera_feed_view = Entity(
     position=(0, -0.35),
     origin=(0, 0)
 )
-camera_feed_view.setTexture(_p3d_tex, 1)
+
+# Apply texture using Panda3D's standard method
+print(f"Setting texture on camera_feed_view.model: {camera_feed_view.model}")
+print(f"Texture object: {_p3d_tex}")
+camera_feed_view.model.setTexture(_p3d_tex)
+print("Texture applied successfully")
 
 # "LIVE" label above the feed
 Text(
@@ -320,7 +327,7 @@ def update():
                 landmark_drawing_spec=node_style,
                 connection_drawing_spec=conn_style
             )
-
+            
     # Overlay paused banner directly on the feed
     if paused:
         cv2.rectangle(rgb, (0, h_px // 2 - 22), (w_px, h_px // 2 + 22), (20, 20, 20), -1)
