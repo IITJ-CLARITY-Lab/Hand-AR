@@ -1,5 +1,6 @@
 from turtle import color
 from ursina import *
+from PIL import ImageGrab
 import cv2
 import mediapipe as mp
 import math
@@ -9,7 +10,9 @@ import os
 import sys
 from PIL import Image
 import time
-from panda3d.core import Texture as P3DTexture
+from panda3d.core import Texture as P3DTexture, Filename
+import psutil
+import GPUtil
 
 selected_model = None
 if len(sys.argv) > 1:
@@ -86,7 +89,7 @@ cap = cv2.VideoCapture(0)
 # --- Pre-create a reusable Panda3D texture for the camera feed ---
 # We bypass Ursina's Texture() constructor (which tries to load a file from disk)
 # and work directly with Panda3D's texture API instead.
-FEED_W, FEED_H = 320, 240  # Smaller resolution = much faster texture uploads
+FEED_W, FEED_H = 256,192    # Smaller resolution = much faster texture uploads
 
 _p3d_tex = P3DTexture('camera_feed')
 _p3d_tex.setup2dTexture(FEED_W, FEED_H, P3DTexture.TUnsignedByte, P3DTexture.FRgb)
@@ -97,13 +100,14 @@ buf = _p3d_tex.modifyRamImage()
 memoryview(buf).cast('B')[:] = b'\x00' * (FEED_W * FEED_H * 3)
 
 def _upload_frame(rgb_frame):
-    """Efficiently upload an OpenCV RGB frame into the reusable Panda3D texture."""
     small = cv2.resize(rgb_frame, (FEED_W, FEED_H), interpolation=cv2.INTER_LINEAR)
-    # Panda3D stores rows bottom-to-top, so flip vertically
+    # Panda3D expects bottom-up images
     small = np.flipud(small)
     small = np.ascontiguousarray(small, dtype=np.uint8)
-    data = small.tobytes()
-    memoryview(_p3d_tex.modifyRamImage()).cast('B')[:] = data
+    buf = _p3d_tex.modifyRamImage()
+    memoryview(buf).cast('B')[:] = small.tobytes()
+    # VERY IMPORTANT → notify Panda3D that texture changed
+    _p3d_tex.setRamImage(buf)
 
 def is_open_palm_relaxed(hand):
     lm = hand.landmark
@@ -126,6 +130,7 @@ last_zoom = None
 smooth_zoom = 0
 paused = False
 PAUSE_FRAMES = 0
+screenshot_cooldown = 0
 
 # --- UI ELEMENTS ---
 
@@ -149,7 +154,7 @@ camera_feed_view = Entity(
     position=(0, -0.35),
     origin=(0, 0)
 )
-camera_feed_view.setTexture(_p3d_tex, 1)
+camera_feed_view.model.setTexture(_p3d_tex)
 
 # "LIVE" label above the feed
 Text(
@@ -197,6 +202,34 @@ fps_text = Text(
     position=(0.75, 0.48),
     color=color.lime
 )
+# CPU Counter(below fps counter)
+cpu_text = Text(
+    text="CPU: 0%",
+    parent=camera.ui,
+    position=(0.75, 0.43),
+    color=color.orange
+)
+
+
+# RAM Counter (below gpu counter)
+ram_text = Text(
+    text="RAM: 0%",
+    parent=camera.ui,
+    position=(0.75, 0.33),
+    color=color.azure
+)
+screenshot_text = Text(
+    text="📸 Screenshot Saved!",
+    parent=camera.ui,
+    position=(0,0.35),
+    origin=(0,0),
+    scale=1.5,
+    color=color.azure,
+    enabled=False
+)
+
+screenshot_timer = 0
+
 
 # Hand label styles — color-coded per hand
 LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),   thickness=2, circle_radius=3)   # Green
@@ -207,8 +240,15 @@ RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0, 100, 220), thickness=2)
 def update():
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry
     global smooth_tx, smooth_ty, last_zoom, smooth_zoom, PAUSE_FRAMES, paused
+    global screenshot_cooldown,screenshot_timer
 
+
+        # ---- SYSTEM STATS ----
     fps_text.text = f"FPS: {int(1 / time.dt if time.dt > 0 else 0)}"
+    cpu_usage = psutil.cpu_percent(interval=None)
+    ram_usage = psutil.virtual_memory().percent
+    cpu_text.text = f"CPU: {cpu_usage}%"
+    ram_text.text = f"RAM: {ram_usage}%"
 
     ok, frame = cap.read()
     if not ok:
@@ -245,6 +285,16 @@ def update():
     if paused:
         current_gest = "SYSTEM PAUSED"
         last_rx = last_ry = last_lx = last_ly = last_zoom = None
+        #adding screenshot funtionality
+        if right and is_peace(right) and screenshot_cooldown == 0:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"screenshots/shot_{timestamp}.png"
+            img = ImageGrab.grab()
+            img.save(filename)
+            print("Screenshot saved:", filename)
+            screenshot_text.enabled=True
+            screenshot_timer=1.5
+            screenshot_cooldown = 20
     else:
         # Rotation (Right Hand)
         if right and not model_locked:
@@ -320,6 +370,14 @@ def update():
                 landmark_drawing_spec=node_style,
                 connection_drawing_spec=conn_style
             )
+
+     #update screenshot global.....for more than one screenshots       
+    if screenshot_cooldown > 0:
+        screenshot_cooldown -= 1
+    if screenshot_timer > 0:
+        screenshot_timer -= time.dt
+    if screenshot_timer <= 0:
+        screenshot_text.enabled = False
 
     # Overlay paused banner directly on the feed
     if paused:

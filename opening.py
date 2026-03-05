@@ -5,6 +5,7 @@ import os
 import sys
 
 
+
 ROOT_BG = "#05070d"
 BTN_BG = "#1e90ff"
 TXT_CLR = "#e6f1ff"
@@ -83,7 +84,6 @@ def show_controls():
 RIGHT HAND
 • Index Move → Rotate
 • Thumb + Index → Zoom
-• Peace ✌ (Paused) → Screenshot
 • Thumbs Up (Paused) → Reset
 
 LEFT HAND
