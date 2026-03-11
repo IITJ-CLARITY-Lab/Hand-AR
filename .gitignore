@@ -1,0 +1,48 @@
+# Virtual Environment
+handtrack_env/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project Specific
+screenshots/
+*.log
+.env
+__pycache__/
+
+# Model Files (optional if they're large)
+# models_compressed/
+
+# OS
+.DS_Store
+Thumbs.db

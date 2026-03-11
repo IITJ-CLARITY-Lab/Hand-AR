@@ -1,6 +1,5 @@
-from turtle import color
 from ursina import *
-from PIL import ImageGrab
+from panda3d.core import Texture as P3DTexture, Filename
 import cv2
 import mediapipe as mp
 import math
@@ -8,13 +7,25 @@ import numpy as np
 import datetime
 import os
 import sys
-from PIL import Image
 import time
-from panda3d.core import Texture as P3DTexture
+import psutil
 
 selected_model = None
 if len(sys.argv) > 1:
     selected_model = sys.argv[1]
+
+# Validate model file exists
+if selected_model:
+    model_path = f"models/{selected_model}"
+    if not os.path.exists(model_path):
+        print(f"ERROR: Model file not found: {model_path}")
+        sys.exit(1)
+else:
+    default_model = "models/vintage_racing_car.glb"
+    if not os.path.exists(default_model):
+        print(f"ERROR: Default model not found: {default_model}")
+        print(f"Available models: {os.listdir('models') if os.path.exists('models') else 'models/ folder not found'}")
+        sys.exit(1)
 
 app = Ursina()
 window.color = color.color(0, 0, 0.08)
@@ -170,7 +181,23 @@ mp_drawing = mp.solutions.drawing_utils
 hands      = mp_hands.Hands(max_num_hands=2,
                              min_detection_confidence=0.8,
                              min_tracking_confidence=0.8)
-cap        = cv2.VideoCapture(0)
+
+# Initialize camera with fallback
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("ERROR: Could not open camera. Please check:")
+    print("  1. Camera device is connected")
+    print("  2. Camera permissions are granted")
+    print("  3. No other application is using the camera")
+    print("\nTrying alternative camera indices...")
+    for i in range(1, 5):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            print(f"Successfully opened camera at index {i}")
+            break
+    else:
+        print("FATAL: No camera found on any index")
+        sys.exit(1)
 
 LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),    thickness=2, circle_radius=3)
 RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50, 180, 255), thickness=2, circle_radius=3)
@@ -194,83 +221,9 @@ last_zoom = None
 smooth_zoom = 0
 paused = False
 PAUSE_FRAMES = 0
+screenshot_cooldown = 0
+screenshot_timer = 0
 
-# --- UI ELEMENTS ---
-
-# Camera feed border (slightly larger quad behind the feed)
-Entity(
-    parent=camera.ui,
-    model='quad',
-    scale=(0.42, 0.285),
-    position=(0, -0.35),
-    color=color.cyan,
-    origin=(0, 0),
-    z=0.01
-)
-
-# Camera feed panel — create without texture, then assign the P3D texture directly
-# to the underlying Panda3D node, completely bypassing Ursina's file-loading system.
-camera_feed_view = Entity(
-    parent=camera.ui,
-    model='quad',
-    scale=(0.40, 0.27),
-    position=(0, -0.35),
-    origin=(0, 0)
-)
-camera_feed_view.setTexture(_p3d_tex, 1)
-
-# "LIVE" label above the feed
-Text(
-    text="● LIVE",
-    parent=camera.ui,
-    position=(0, -0.205),
-    origin=(0, 0),
-    scale=1.2,
-    color=color.red
-)
-
-# Gesture Display
-gesture_text = Text(
-    text="GESTURE: NONE",
-    parent=camera.ui,
-    position=(0, 0.45),
-    origin=(0, 0),
-    scale=1.5,
-    color=color.yellow
-)
-
-# Persistent Instructions (Left Side)
-Text(
-    text="""
-    <orange>CONTROLS</orange>
-    <b>RIGHT HAND</b>
-    • Index: Rotate
-    • Pinch: Zoom
-    • Peace: Shot (Paused)
-    • Thumb Up: Reset (Paused)
-
-    <b>LEFT HAND</b>
-    • Wrist: Move
-    • Palm: Pause
-    """,
-    parent=camera.ui,
-    position=(-0.85, 0.2),
-    scale=0.75
-)
-
-# FPS Counter (Top Right)
-fps_text = Text(
-    text="FPS: 0",
-    parent=camera.ui,
-    position=(0.75, 0.48),
-    color=color.lime
-)
-
-# Hand label styles — color-coded per hand
-LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),   thickness=2, circle_radius=3)   # Green
-RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50, 150, 255), thickness=2, circle_radius=3)   # Blue
-LEFT_CONN   = mp_drawing.DrawingSpec(color=(0, 180, 0),   thickness=2)
-RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0, 100, 220), thickness=2)
 
 def update():
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry
@@ -311,8 +264,9 @@ def update():
         current_gest = "Paused"
         last_rx = last_ry = last_lx = last_ly = last_zoom = None
         if right and is_peace(right) and screenshot_cooldown == 0:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            ImageGrab.grab().save(f"screenshots/shot_{ts}.png")
+            ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.abspath(f"screenshots/shot_{ts}.png")
+            app.win.saveScreenshot(Filename.fromOsSpecific(path))
             screenshot_text.enabled = True
             screenshot_timer        = 2.0
             screenshot_cooldown     = 25
@@ -364,29 +318,16 @@ def update():
     if res.multi_hand_landmarks and res.multi_handedness:
         for i, hand_lms in enumerate(res.multi_hand_landmarks):
             label = res.multi_handedness[i].classification[0].label
-            if label == "Left":
-                node_style = LEFT_STYLE
-                conn_style = LEFT_CONN
-                # Draw "LEFT" label near wrist
-                wx = int(hand_lms.landmark[0].x * w_px)
-                wy = int(hand_lms.landmark[0].y * h_px)
-                cv2.putText(rgb, "LEFT", (wx - 20, wy + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 0), 2)
-            else:
-                node_style = RIGHT_STYLE
-                conn_style = RIGHT_CONN
-                wx = int(hand_lms.landmark[0].x * w_px)
-                wy = int(hand_lms.landmark[0].y * h_px)
-                cv2.putText(rgb, "RIGHT", (wx - 20, wy + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 150, 255), 2)
+            ns, cs = (LEFT_STYLE, LEFT_CONN) if label == "Left" else (RIGHT_STYLE, RIGHT_CONN)
+            tag_col = (0, 220, 0) if label == "Left" else (50, 180, 255)
+            wx = int(hand_lms.landmark[0].x * w_px)
+            wy = int(hand_lms.landmark[0].y * h_px)
+            cv2.putText(rgb, label.upper(), (wx - 20, wy + 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, tag_col, 2)
+            mp_drawing.draw_landmarks(rgb, hand_lms, mp_hands.HAND_CONNECTIONS,
+                                      landmark_drawing_spec=ns,
+                                      connection_drawing_spec=cs)
 
-            mp_drawing.draw_landmarks(
-                rgb, hand_lms, mp_hands.HAND_CONNECTIONS,
-                landmark_drawing_spec=node_style,
-                connection_drawing_spec=conn_style
-            )
-
-    # Overlay paused banner directly on the feed
     if paused:
         cv2.rectangle(rgb, (0, h_px // 2 - 20), (w_px, h_px // 2 + 20), (18, 18, 28), -1)
         cv2.putText(rgb, "-- PAUSED --", (w_px // 2 - 95, h_px // 2 + 7),
