@@ -1,6 +1,5 @@
-from turtle import color
 from ursina import *
-from PIL import ImageGrab
+from panda3d.core import Texture as P3DTexture, Filename
 import cv2
 import mediapipe as mp
 import math
@@ -8,14 +7,25 @@ import numpy as np
 import datetime
 import os
 import sys
-from PIL import Image
 import time
-from panda3d.core import Texture as P3DTexture
 import psutil
 
 selected_model = None
 if len(sys.argv) > 1:
     selected_model = sys.argv[1]
+
+# Validate model file exists
+if selected_model:
+    model_path = f"models/{selected_model}"
+    if not os.path.exists(model_path):
+        print(f"ERROR: Model file not found: {model_path}")
+        sys.exit(1)
+else:
+    default_model = "models/vintage_racing_car.glb"
+    if not os.path.exists(default_model):
+        print(f"ERROR: Default model not found: {default_model}")
+        print(f"Available models: {os.listdir('models') if os.path.exists('models') else 'models/ folder not found'}")
+        sys.exit(1)
 
 app = Ursina()
 window.color = color.color(0, 0, 0.08)
@@ -253,7 +263,23 @@ mp_drawing = mp.solutions.drawing_utils
 hands      = mp_hands.Hands(max_num_hands=2,
                              min_detection_confidence=0.8,
                              min_tracking_confidence=0.8)
-cap        = cv2.VideoCapture(0)
+
+# Initialize camera with fallback
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("ERROR: Could not open camera. Please check:")
+    print("  1. Camera device is connected")
+    print("  2. Camera permissions are granted")
+    print("  3. No other application is using the camera")
+    print("\nTrying alternative camera indices...")
+    for i in range(1, 5):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            print(f"Successfully opened camera at index {i}")
+            break
+    else:
+        print("FATAL: No camera found on any index")
+        sys.exit(1)
 
 LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),    thickness=2, circle_radius=3)
 RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50, 180, 255), thickness=2, circle_radius=3)
@@ -414,8 +440,9 @@ def update():
         current_gest = "Paused"
         last_rx = last_ry = last_lx = last_ly = last_zoom = None
         if right and is_peace(right) and screenshot_cooldown == 0:
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            ImageGrab.grab().save(f"screenshots/shot_{ts}.png")
+            ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.abspath(f"screenshots/shot_{ts}.png")
+            app.win.saveScreenshot(Filename.fromOsSpecific(path))
             screenshot_text.enabled = True
             screenshot_timer        = 2.0
             screenshot_cooldown     = 25
