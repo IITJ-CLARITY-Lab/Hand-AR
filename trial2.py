@@ -1,5 +1,7 @@
+
 from ursina import *
 from panda3d.core import Texture as P3DTexture, Filename
+from direct.showbase.ShowBase import ShowBase
 import cv2
 import mediapipe as mp
 import math
@@ -15,25 +17,31 @@ if len(sys.argv) > 1:
     selected_model = sys.argv[1]
 
 if selected_model:
-    model_path = f"models/{selected_model}"
+    model_path = selected_model  # already absolute, trust it
     if not os.path.exists(model_path):
         print(f"ERROR: Model file not found: {model_path}")
         sys.exit(1)
 else:
-    default_model = "models/vintage_racing_car.glb"
-    if not os.path.exists(default_model):
-        print(f"ERROR: Default model not found: {default_model}")
-        print(f"Available models: {os.listdir('models') if os.path.exists('models') else 'models/ folder not found'}")
+    PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(PROJECT_DIR, "models", "Old_Rusty_Car.glb")
+    if not os.path.exists(model_path):
+        print(f"ERROR: Default model not found: {model_path}")
         sys.exit(1)
 
 app = Ursina()
 window.color = color.color(0, 0, 0.08)
 os.makedirs("screenshots", exist_ok=True)
+# Load GLB directly via Panda3D loader, bypassing Ursina's asset system
+panda_path = Filename.from_os_specific(model_path)  # model_path is your absolute path
+loaded = base.loader.load_model(panda_path) 
 
-car = Entity(
-    model=f"models/{selected_model}" if selected_model else "models/vintage_racing_car.glb",
-    scale=1
-)
+if loaded is None:
+    print(f"ERROR: Panda3D could not load model: {model_path}")
+    sys.exit(1)
+
+car = Entity()
+loaded.reparent_to(car)
+car.scale = 1
 
 try:
     min_b, max_b = car.model.get_tight_bounds()

@@ -1,8 +1,3 @@
-"""
-3D Interaction Controller — Launcher
-Aesthetic: Dark terminal / blueprint — sharp, technical, confident.
-"""
-
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
@@ -10,14 +5,16 @@ import os
 import sys
 import math
 import time
+from glb_scanner import unified_search,download_glb
+
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BG        = "#080c10"
 BG2       = "#0d1520"
 PANEL     = "#0f1923"
 PANEL2    = "#141e2b"
-ACCENT    = "#00d4ff"       # electric cyan
-ACCENT2   = "#0077ff"       # deep blue
+ACCENT    = "#00d4ff"   
+ACCENT2   = "#0077ff"      
 ACCENT_DIM= "#003d5c"
 GREEN     = "#00ff88"
 ORANGE    = "#ff6b35"
@@ -28,7 +25,6 @@ BORDER    = "#1a2d3d"
 BORDER_HI = "#00d4ff"
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
-# Use Courier New as mono fallback — feels very technical/terminal
 FONT_TITLE  = ("Courier New", 26, "bold")
 FONT_SUB    = ("Courier New", 10, "normal")
 FONT_LABEL  = ("Courier New", 9,  "normal")
@@ -39,6 +35,7 @@ FONT_HDR    = ("Courier New", 12, "bold")
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR  = os.path.join(PROJECT_DIR, "models")
+LOCAL_MODELS_DIR=MODELS_DIR
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -161,7 +158,6 @@ class HeaderCanvas(tk.Canvas):
         for y in range(0, h, 4):
             self.create_line(0, y, w, y, fill="#0a0f18", width=1)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 #  Model selector window
 # ─────────────────────────────────────────────────────────────────────────────
@@ -177,15 +173,14 @@ def launch_ursina(model_name: str):
     subprocess.Popen([sys.executable, interaction_file, model_name],
                      cwd=PROJECT_DIR)
 
-
 def open_model_selector():
     if not os.path.exists(MODELS_DIR):
         messagebox.showerror("Error", "models/ folder not found")
         return
 
-    win = _make_toplevel(root, "Select Model", 460, 460)
+    win = _make_toplevel(root, "Select Model", 460, 520)
 
-    # Header
+    # ── Header ────────────────────────────────────────────────────────────────
     hdr = tk.Frame(win, bg=PANEL, pady=0)
     hdr.pack(fill="x")
     tk.Label(hdr, text="// SELECT MODEL", fg=ACCENT, bg=PANEL,
@@ -194,119 +189,199 @@ def open_model_selector():
              font=FONT_MONO).pack(side="right", padx=20)
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
 
-    # Status bar
-    status = tk.Label(win, text="SCANNING models/ ...", fg=TEXT_DIM, bg=BG2,
-                      font=FONT_MONO, anchor="w", padx=16, pady=6)
+    # ── Search bar ────────────────────────────────────────────────────────────
+    search_frame = tk.Frame(win, bg=BG2, padx=16, pady=10)
+    search_frame.pack(fill="x")
+
+    tk.Label(search_frame, text="QUERY >", fg=ACCENT, bg=BG2,
+             font=FONT_MONO).pack(side="left", padx=(0, 8))
+
+    search_var = tk.StringVar(value="car")
+    search_entry = tk.Entry(
+        search_frame, textvariable=search_var,
+        bg=PANEL, fg=TEXT, insertbackground=ACCENT,
+        font=("Courier New", 10), relief="flat", bd=0,
+        highlightthickness=1, highlightcolor=ACCENT,
+        highlightbackground=BORDER
+    )
+    search_entry.pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 10))
+    search_entry.focus_set()
+
+    search_btn = tk.Button(
+        search_frame, text="[ SEARCH ]",
+        bg=ACCENT, fg=BG, activebackground=ACCENT2, activeforeground=TEXT,
+        font=FONT_BTN_SM, relief="flat", bd=0, cursor="hand2", padx=8
+    )
+    search_btn.pack(side="left")
+    _btn_hover(search_btn, ACCENT, ACCENT2, BG, TEXT)
+
+    tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
+
+    # ── Status bar ────────────────────────────────────────────────────────────
+    status = tk.Label(win, text="Enter a query and press SEARCH ...", fg=TEXT_DIM,
+                      bg=BG2, font=FONT_MONO, anchor="w", padx=16, pady=6)
     status.pack(fill="x")
 
-    # Scrollable model list
+    # ── Scrollable model list ─────────────────────────────────────────────────
     outer = tk.Frame(win, bg=BG, padx=16, pady=12)
     outer.pack(fill="both", expand=True)
 
-    canvas  = tk.Canvas(outer, bg=BG, highlightthickness=0, bd=0)
-    sb      = tk.Scrollbar(outer, orient="vertical", command=canvas.yview,
-                           bg=BG, troughcolor=BG2, width=8)
-    inner   = tk.Frame(canvas, bg=BG)
+    canvas_list = tk.Canvas(outer, bg=BG, highlightthickness=0, bd=0)
+    sb           = tk.Scrollbar(outer, orient="vertical", command=canvas_list.yview,
+                                bg=BG, troughcolor=BG2, width=8)
+    inner        = tk.Frame(canvas_list, bg=BG)
 
     inner.bind("<Configure>",
-               lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.create_window((0, 0), window=inner, anchor="nw")
-    canvas.configure(yscrollcommand=sb.set)
-    canvas.pack(side="left", fill="both", expand=True)
+               lambda e: canvas_list.configure(scrollregion=canvas_list.bbox("all")))
+    canvas_list.create_window((0, 0), window=inner, anchor="nw")
+    canvas_list.configure(yscrollcommand=sb.set)
+    canvas_list.pack(side="left", fill="both", expand=True)
     sb.pack(side="right", fill="y")
 
-    # Mouse-wheel scroll
-    canvas.bind_all("<MouseWheel>",
-                    lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
+    canvas_list.bind_all("<MouseWheel>",
+                         lambda e: canvas_list.yview_scroll(-1*(e.delta//120), "units"))
 
-    models = sorted([f for f in os.listdir(MODELS_DIR)
-                     if f.lower().endswith((".glb", ".obj"))])
-
-    if not models:
-        tk.Label(inner, text="No models found in models/",
-                 fg=ORANGE, bg=BG, font=FONT_LABEL, pady=20).pack()
-        status.config(text="0 models found")
-        return
-
-    status.config(text=f"{len(models)} model(s) found")
-
-    for idx, model in enumerate(models):
-        ext  = os.path.splitext(model)[1].upper()
-        name = os.path.splitext(model)[0]
-
-        row = tk.Frame(inner, bg=PANEL, pady=0, cursor="hand2")
-        row.pack(fill="x", pady=3)
-
-        # Left accent bar
-        accent_bar = tk.Frame(row, bg=ACCENT_DIM, width=3)
-        accent_bar.pack(side="left", fill="y")
-
-        # Index number
-        tk.Label(row, text=f"{idx+1:02d}", fg=TEXT_MUTE, bg=PANEL,
-                 font=FONT_MONO, padx=8, pady=10).pack(side="left")
-
-        # Name + ext
-        info = tk.Frame(row, bg=PANEL)
-        info.pack(side="left", fill="both", expand=True, padx=4, pady=6)
-        tk.Label(info, text=name, fg=TEXT, bg=PANEL,
-                 font=("Courier New", 10, "bold"), anchor="w").pack(fill="x")
-        tk.Label(info, text=ext, fg=ACCENT, bg=PANEL,
-                 font=FONT_MONO, anchor="w").pack(fill="x")
-
-        # Launch icon label
-        arrow = tk.Label(row, text="  LOAD  >", fg=TEXT_DIM, bg=PANEL,
-                         font=FONT_BTN_SM, padx=12)
-        arrow.pack(side="right", fill="y")
-
-        # Hover effects for the whole row
-        def _make_hover(r, ab, ar):
-            def on_enter(e):
-                r.config(bg=PANEL2)
-                ab.config(bg=ACCENT)
-                ar.config(fg=ACCENT, bg=PANEL2)
-                for child in r.winfo_children():
-                    if child not in (ab, ar):
-                        try:
-                            child.config(bg=PANEL2)
-                            for c2 in child.winfo_children():
-                                c2.config(bg=PANEL2)
-                        except Exception:
-                            pass
-            def on_leave(e):
-                r.config(bg=PANEL)
-                ab.config(bg=ACCENT_DIM)
-                ar.config(fg=TEXT_DIM, bg=PANEL)
-                for child in r.winfo_children():
-                    if child not in (ab, ar):
-                        try:
-                            child.config(bg=PANEL)
-                            for c2 in child.winfo_children():
-                                c2.config(bg=PANEL)
-                        except Exception:
-                            pass
-            r.bind("<Enter>",  on_enter)
-            r.bind("<Leave>",  on_leave)
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _make_hover(r, ab, ar):
+        def on_enter(e):
+            r.config(bg=PANEL2); ab.config(bg=ACCENT); ar.config(fg=ACCENT, bg=PANEL2)
             for child in r.winfo_children():
-                child.bind("<Enter>",  on_enter)
-                child.bind("<Leave>",  on_leave)
-                for c2 in child.winfo_children():
-                    c2.bind("<Enter>",  on_enter)
-                    c2.bind("<Leave>",  on_leave)
+                if child not in (ab, ar):
+                    try:
+                        child.config(bg=PANEL2)
+                        for c2 in child.winfo_children():
+                            c2.config(bg=PANEL2)
+                    except Exception:
+                        pass
+        def on_leave(e):
+            r.config(bg=PANEL); ab.config(bg=ACCENT_DIM); ar.config(fg=TEXT_DIM, bg=PANEL)
+            for child in r.winfo_children():
+                if child not in (ab, ar):
+                    try:
+                        child.config(bg=PANEL)
+                        for c2 in child.winfo_children():
+                            c2.config(bg=PANEL)
+                    except Exception:
+                        pass
+        r.bind("<Enter>", on_enter); r.bind("<Leave>", on_leave)
+        for child in r.winfo_children():
+            child.bind("<Enter>", on_enter); child.bind("<Leave>", on_leave)
+            for c2 in child.winfo_children():
+                c2.bind("<Enter>", on_enter); c2.bind("<Leave>", on_leave)
 
-        def _make_click(m, r=row):
-            def on_click(e):
+    def _make_click(m, r):
+        def on_click(e):
+            # Disable further clicks while downloading
+            search_btn.config(state="disabled")
+            status.config(text=f"Downloading  {m['name']} ...", fg=ORANGE)
+            win.update_idletasks()
+
+            path = download_glb(m, LOCAL_MODELS_DIR)
+            search_btn.config(state="normal")
+            if path:
+                path = os.path.abspath(path)
+                if not os.path.exists(path):
+                    messagebox.showerror("Error", f"File not found:\n{path}")
+                    return
+                print("Launching model:", path)
                 win.destroy()
-                launch_ursina(m)
-            for widget in _all_children(r):
-                widget.bind("<Button-1>", on_click)
-            r.bind("<Button-1>", on_click)
+                launch_ursina(path)
+            else:
+                status.config(text="Download failed — try another model", fg=ORANGE)
+                messagebox.showinfo("Download failed",
+                                    "Model could not be downloaded from web")
 
-        _make_hover(row, accent_bar, arrow)
-        _make_click(model)
+        for widget in _all_children(r):
+            widget.bind("<Button-1>", on_click)
+        r.bind("<Button-1>", on_click)
 
-    # Footer
+    # ── Populate list from results ────────────────────────────────────────────
+    def _populate(models):
+        # Clear previous rows
+        for widget in inner.winfo_children():
+            widget.destroy()
+
+        if not models:
+            tk.Label(inner, text="No results found — try a different query",
+                     fg=ORANGE, bg=BG, font=FONT_LABEL, pady=20).pack()
+            status.config(text="0 results", fg=TEXT_DIM)
+            return
+
+        # Local first, then web
+        local_models = [m for m in models if m["source"] == "local"]
+        web_models   = [m for m in models if m["source"] == "web"]
+        ordered      = local_models + web_models
+
+        visible = 0
+        for idx, model in enumerate(ordered):
+            if model["source"] == "local" and not os.path.exists(model.get("path", "")):
+                continue
+
+            name = model["name"]
+            ext  = os.path.splitext(name)[1].upper() if model["source"] == "local" else "[WEB]"
+            ext_color = GREEN if model["source"] == "local" else ACCENT
+
+            row = tk.Frame(inner, bg=PANEL, pady=0, cursor="hand2")
+            row.pack(fill="x", pady=3)
+
+            accent_bar = tk.Frame(row, bg=ACCENT_DIM, width=3)
+            accent_bar.pack(side="left", fill="y")
+
+            tk.Label(row, text=f"{idx+1:02d}", fg=TEXT_MUTE, bg=PANEL,
+                     font=FONT_MONO, padx=8, pady=10).pack(side="left")
+
+            info = tk.Frame(row, bg=PANEL)
+            info.pack(side="left", fill="both", expand=True, padx=4, pady=6)
+            tk.Label(info, text=name, fg=TEXT, bg=PANEL,
+                     font=("Courier New", 10, "bold"), anchor="w").pack(fill="x")
+            tk.Label(info, text=ext, fg=ext_color, bg=PANEL,
+                     font=FONT_MONO, anchor="w").pack(fill="x")
+
+            arrow = tk.Label(row, text="  LOAD  >", fg=TEXT_DIM, bg=PANEL,
+                             font=FONT_BTN_SM, padx=12)
+            arrow.pack(side="right", fill="y")
+
+            _make_hover(row, accent_bar, arrow)
+            _make_click(model, row)
+            visible += 1
+
+        local_count = sum(1 for m in ordered if m["source"] == "local")
+        web_count   = sum(1 for m in ordered if m["source"] == "web")
+        status.config(
+            text=f"{visible} result(s)  —  {local_count} local  /  {web_count} web",
+            fg=TEXT_DIM
+        )
+
+    # ── Search action ─────────────────────────────────────────────────────────
+    def _do_search():
+        query = search_var.get().strip()
+        if not query:
+            return
+        status.config(text=f"Searching for  \"{query}\" ...", fg=ACCENT)
+        search_btn.config(state="disabled")
+        win.update_idletasks()
+
+        try:
+            # use_cache=False so a new query always hits the web fresh
+            results = unified_search(MODELS_DIR, query=query, use_cache=False)
+        except Exception as ex:
+            status.config(text=f"Search error: {ex}", fg=ORANGE)
+            search_btn.config(state="normal")
+            return
+
+        search_btn.config(state="normal")
+        _populate(results)
+
+    search_btn.config(command=_do_search)
+    # Also trigger search on Enter key inside the entry
+    search_entry.bind("<Return>", lambda e: _do_search())
+
+    # Run default search immediately on open
+    win.after(50, _do_search)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
-    tk.Label(win, text="Click a model to launch the viewer",
+    tk.Label(win, text="Click a model to download & launch the viewer",
              fg=TEXT_DIM, bg=BG, font=FONT_MONO, pady=8).pack()
 
 
