@@ -14,7 +14,6 @@ selected_model = None
 if len(sys.argv) > 1:
     selected_model = sys.argv[1]
 
-# Validate model file exists
 if selected_model:
     model_path = f"models/{selected_model}"
     if not os.path.exists(model_path):
@@ -52,24 +51,24 @@ if size > 0:
 camera.position = Vec3(0, 0, -12)
 camera.look_at(car.position)
 
-model_locked = False
+model_locked  = False
 camera_locked = False
-view_mode = "free"
+view_mode     = "free"
 
 def toggle_model_lock():
     global model_locked
     model_locked = not model_locked
-    model_btn.text = f"Model Lock: {'ON' if model_locked else 'OFF'}"
+    model_btn.text  = f"Model Lock: {'ON' if model_locked else 'OFF'}"
     model_btn.color = color.color(0, 0, 0.30) if model_locked else color.color(0, 0, 0.20)
 
 def set_view(mode):
     global view_mode, camera_locked
-    view_mode = mode
+    view_mode     = mode
     camera_locked = True
-    if mode == "front":  camera.position = Vec3(0, 0, -12)
-    elif mode == "side": camera.position = Vec3(12, 0, 0)
-    elif mode == "top":  camera.position = Vec3(0, 12, 0)
-    elif mode == "iso":  camera.position = Vec3(8, 6, -8)
+    if mode == "front":  camera.position = Vec3(0,  0, -12)
+    elif mode == "side": camera.position = Vec3(12, 0,   0)
+    elif mode == "top":  camera.position = Vec3(0,  12,  0)
+    elif mode == "iso":  camera.position = Vec3(8,  6,  -8)
     camera.look_at(car.position)
 
 BTN = dict(
@@ -85,15 +84,32 @@ Text("View Presets", parent=camera.ui,
      position=(-0.67, 0.275), origin=(0, 0), scale=0.8, color=color.gray)
 
 vbtn = dict(scale=(0.10, 0.050), **BTN)
-Button("Front", position=(-0.725, 0.22), on_click=lambda: set_view("front"), **vbtn)
-Button("Side",  position=(-0.615, 0.22), on_click=lambda: set_view("side"),  **vbtn)
-Button("Top",   position=(-0.725, 0.16), on_click=lambda: set_view("top"),   **vbtn)
-Button("ISO",   position=(-0.615, 0.16), on_click=lambda: set_view("iso"),   **vbtn)
+btn_front = Button("Front", position=(-0.725, 0.22), on_click=lambda: set_view("front"), **vbtn)
+btn_side  = Button("Side",  position=(-0.615, 0.22), on_click=lambda: set_view("side"),  **vbtn)
+btn_top   = Button("Top",   position=(-0.725, 0.16), on_click=lambda: set_view("top"),   **vbtn)
+btn_iso   = Button("ISO",   position=(-0.615, 0.16), on_click=lambda: set_view("iso"),   **vbtn)
 
-alpha = 0.25
-rot_sens = 2
+# ── Smoothing constants ───────────────────────────────────────────────────────
+ALPHA_ROT   = 0.12
+ALPHA_TRANS = 0.10
+ALPHA_ZOOM  = 0.10
+
+ROT_DECAY   = 0.82
+TRANS_DECAY = 0.80
+ZOOM_DECAY  = 0.78
+
+MAX_ROT_DELTA   = 60
+MAX_TRANS_DELTA = 0.12
+MAX_ZOOM_DELTA  = 0.06
+
+# Pause needs this many CONSECUTIVE frames of open-palm before engaging,
+# and will only RELEASE once open-palm is gone for PAUSE_RELEASE_FRAMES frames.
+PAUSE_ENGAGE_FRAMES  = 8   # ~0.25 s  — quick enough to feel responsive
+PAUSE_RELEASE_FRAMES = 6   # prevents flicker on the way out
+
+rot_sens   = 2
 trans_sens = 15
-zoom_sens = 40
+zoom_sens  = 40
 
 Text("Sensitivity", parent=camera.ui,
      position=(0.55, 0.05), scale=0.9, color=color.white)
@@ -116,7 +132,8 @@ zoom_slider = Slider(min=10, max=80, default=zoom_sens, step=1,
 Text(
     "RIGHT HAND\n"
     "  Index finger  ->  Rotate\n"
-    "  Pinch         ->  Zoom\n"
+    "  Pinch closer  ->  Zoom in\n"
+    "  Pinch apart   ->  Zoom out\n"
     "  Peace sign    ->  Screenshot\n\n"
     "LEFT HAND\n"
     "  Open palm     ->  Pause\n"
@@ -159,7 +176,7 @@ def _upload_frame(rgb_frame):
     small = cv2.resize(rgb_frame, (FEED_W, FEED_H), interpolation=cv2.INTER_LINEAR)
     small = np.flipud(small)
     small = np.ascontiguousarray(small, dtype=np.uint8)
-    buf = _p3d_tex.modifyRamImage()
+    buf   = _p3d_tex.modifyRamImage()
     memoryview(buf).cast('B')[:] = small.tobytes()
     _p3d_tex.setRamImage(buf)
 
@@ -174,7 +191,7 @@ camera_feed_view = Entity(
 )
 camera_feed_view.model.setTexture(_p3d_tex)
 
-Text("● LIVE", parent=camera.ui,
+Text("LIVE", parent=camera.ui,
      position=(-0.67, -0.168), origin=(0, 0),
      scale=0.9, color=color.red)
 
@@ -191,29 +208,24 @@ screenshot_text = Text(
 # ─────────────────────────────────────────────────────────────
 #  HAND INITIALIZATION OVERLAY
 # ─────────────────────────────────────────────────────────────
-# States: "waiting"  -> no hand seen yet
-#         "scanning" -> hand detected, filling progress bar
-#         "locked"   -> hand registered, session active
-#         "lost"     -> registered hand left frame, need re-init
-
-INIT_HOLD_FRAMES  = 45   # frames hand must stay to lock (~1.5s @ 30fps)
-LOST_GRACE_FRAMES = 10   # frames allowed out of frame before reset
+INIT_HOLD_FRAMES  = 45
+LOST_GRACE_FRAMES = 10
 
 init_state       = "waiting"
-init_frames      = 0        # progress counter
-lost_frames      = 0        # consecutive frames with missing registered hand
-registered_hands = {}       # label -> True  (labels that are registered)
+init_frames      = 0
+lost_frames      = 0
+registered_hands = {}
 
-# Overlay panel — dark translucent quad behind the text
 init_panel = Entity(
     parent=camera.ui, model='quad',
-    scale=(0.55, 0.13), position=(0, 0.0),
+    scale=(0.60, 0.13), position=(0, 0.0),
     color=color.color(0, 0, 0.12, 0.88), origin=(0, 0), z=0.02,
     enabled=True,
 )
 
+# No emoji — Ursina's default font doesn't support them (causes console spam)
 init_status_text = Text(
-    "✋  Show your hand(s) to begin",
+    "Show your hand(s) to begin",
     parent=camera.ui,
     position=(0, 0.03),
     origin=(0, 0),
@@ -223,7 +235,7 @@ init_status_text = Text(
 )
 
 init_sub_text = Text(
-    "Hold still while scanning…",
+    "Hold still while scanning...",
     parent=camera.ui,
     position=(0, -0.02),
     origin=(0, 0),
@@ -232,7 +244,6 @@ init_sub_text = Text(
     enabled=True,
 )
 
-# Progress bar: background + fill
 init_bar_bg = Entity(
     parent=camera.ui, model='quad',
     scale=(0.42, 0.018), position=(0, -0.06),
@@ -254,24 +265,18 @@ def _set_init_overlay(enabled: bool):
     init_bar_fill.enabled    = enabled
 
 def _update_init_bar(fraction: float):
-    """fraction in [0, 1]"""
     init_bar_fill.scale_x = 0.42 * max(0.0, min(1.0, fraction))
 
 
 mp_hands   = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
-hands      = mp_hands.Hands(max_num_hands=2,
-                             min_detection_confidence=0.8,
-                             min_tracking_confidence=0.8)
+hands_det  = mp_hands.Hands(max_num_hands=2,
+                              min_detection_confidence=0.8,
+                              min_tracking_confidence=0.8)
 
-# Initialize camera with fallback
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
-    print("ERROR: Could not open camera. Please check:")
-    print("  1. Camera device is connected")
-    print("  2. Camera permissions are granted")
-    print("  3. No other application is using the camera")
-    print("\nTrying alternative camera indices...")
+    print("ERROR: Could not open camera.")
     for i in range(1, 5):
         cap = cv2.VideoCapture(i)
         if cap.isOpened():
@@ -281,10 +286,10 @@ if not cap.isOpened():
         print("FATAL: No camera found on any index")
         sys.exit(1)
 
-LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0, 220, 0),    thickness=2, circle_radius=3)
-RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50, 180, 255), thickness=2, circle_radius=3)
-LEFT_CONN   = mp_drawing.DrawingSpec(color=(0, 180, 0),    thickness=2)
-RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0, 130, 230),  thickness=2)
+LEFT_STYLE  = mp_drawing.DrawingSpec(color=(0,   220,   0), thickness=2, circle_radius=3)
+RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50,  180, 255), thickness=2, circle_radius=3)
+LEFT_CONN   = mp_drawing.DrawingSpec(color=(0,   180,   0), thickness=2)
+RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0,   130, 230), thickness=2)
 
 def is_open_palm_relaxed(hand):
     lm = hand.landmark
@@ -293,46 +298,70 @@ def is_open_palm_relaxed(hand):
 
 def is_peace(hand):
     lm = hand.landmark
-    return lm[8].y < lm[6].y and lm[12].y < lm[10].y and lm[16].y > lm[14].y
+    return (lm[8].y  < lm[6].y and
+            lm[12].y < lm[10].y and
+            lm[16].y > lm[14].y)
+
+def pinch_distance(hand):
+    """Raw distance between thumb tip (4) and index tip (8)."""
+    lm = hand.landmark
+    return math.dist((lm[4].x, lm[4].y), (lm[8].x, lm[8].y))
 
 def is_pinch(hand):
-    lm = hand.landmark
-    return math.dist((lm[4].x, lm[4].y), (lm[8].x, lm[8].y)) < 0.05
+    return pinch_distance(hand) < 0.05
 
 
-smooth_rx = smooth_ry = smooth_tx = smooth_ty = 0
-last_rx = last_ry = last_lx = last_ly = None
-last_zoom = None
-smooth_zoom = 0
-paused = False
-PAUSE_FRAMES = 0
+# ── Motion state ──────────────────────────────────────────────────────────────
+smooth_rx = smooth_ry = 0.0
+smooth_tx = smooth_ty = 0.0
+smooth_zoom = 0.0
+
+last_rx = last_ry = None
+last_lx = last_ly = None
+last_zoom = None          # stores previous pinch distance
+
+# Pause state — hysteresis counters
+PAUSE_FRAMES   = 0        # consecutive open-palm frames
+UNPAUSE_FRAMES = 0        # consecutive non-open-palm frames while paused
+paused         = False
+
 screenshot_cooldown = 0
-screenshot_timer = 0
+screenshot_timer    = 0
+
+
+def _full_motion_reset():
+    global last_rx, last_ry, last_lx, last_ly, last_zoom
+    global smooth_rx, smooth_ry, smooth_tx, smooth_ty, smooth_zoom
+    global paused, PAUSE_FRAMES, UNPAUSE_FRAMES
+    last_rx = last_ry = None
+    last_lx = last_ly = None
+    last_zoom = None
+    smooth_rx = smooth_ry = 0.0
+    smooth_tx = smooth_ty = 0.0
+    smooth_zoom = 0.0
+    paused         = False
+    PAUSE_FRAMES   = 0
+    UNPAUSE_FRAMES = 0
 
 
 def _reset_init():
-    """Go back to waiting state, clear registered hands."""
     global init_state, init_frames, lost_frames, registered_hands
-    global last_rx, last_ry, last_lx, last_ly, last_zoom
-    global smooth_rx, smooth_ry, smooth_tx, smooth_ty, smooth_zoom, paused, PAUSE_FRAMES
     init_state       = "waiting"
     init_frames      = 0
     lost_frames      = 0
     registered_hands = {}
-    last_rx = last_ry = last_lx = last_ly = last_zoom = None
-    smooth_rx = smooth_ry = smooth_tx = smooth_ty = smooth_zoom = 0
-    paused = False
-    PAUSE_FRAMES = 0
+    _full_motion_reset()
     _update_init_bar(0)
     _set_init_overlay(True)
-    init_status_text.text  = "✋  Show your hand(s) to begin"
+    init_status_text.text  = "Show your hand(s) to begin"
     init_status_text.color = color.yellow
-    init_sub_text.text     = "Hold still while scanning…"
+    init_sub_text.text     = "Hold still while scanning..."
 
 
 def update():
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry
-    global smooth_tx, smooth_ty, last_zoom, smooth_zoom, PAUSE_FRAMES, paused
+    global smooth_tx, smooth_ty, last_zoom, smooth_zoom
+    global PAUSE_FRAMES, UNPAUSE_FRAMES, paused
     global screenshot_cooldown, screenshot_timer
     global rot_sens, trans_sens, zoom_sens
     global init_state, init_frames, lost_frames, registered_hands
@@ -352,10 +381,9 @@ def update():
 
     frame = cv2.flip(frame, 1)
     rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    res   = hands.process(rgb)
+    res   = hands_det.process(rgb)
 
-    # Build a dict of what mediapipe sees this frame: label -> landmark object
-    seen_this_frame = {}   # {"Left": lm, "Right": lm}
+    seen_this_frame = {}
     if res.multi_hand_landmarks and res.multi_handedness:
         for i, h in enumerate(res.multi_handedness):
             label = h.classification[0].label
@@ -363,57 +391,46 @@ def update():
 
     h_px, w_px, _ = frame.shape
 
-    # ── INITIALIZATION STATE MACHINE ──────────────────────────────────────────
+    # ── INITIALIZATION STATE MACHINE ─────────────────────────────────────────
     if init_state != "locked":
         if not seen_this_frame:
-            # No hand visible → reset progress
             init_frames = 0
             _update_init_bar(0)
             if init_state != "waiting":
-                init_state = "waiting"
-                init_status_text.text  = "✋  Show your hand(s) to begin"
+                init_state             = "waiting"
+                init_status_text.text  = "Show your hand(s) to begin"
                 init_status_text.color = color.yellow
-                init_sub_text.text     = "Hold still while scanning…"
+                init_sub_text.text     = "Hold still while scanning..."
         else:
-            # Hand(s) visible → accumulate
             init_state   = "scanning"
             init_frames += 1
-            fraction     = init_frames / INIT_HOLD_FRAMES
-            _update_init_bar(fraction)
+            _update_init_bar(init_frames / INIT_HOLD_FRAMES)
 
-            # Pulse status text
-            if init_frames % 10 < 5:
-                init_status_text.text = "🔍  Scanning…"
-            else:
-                init_status_text.text = "🔍  Hold steady…"
+            init_status_text.text  = "Scanning..." if init_frames % 10 < 5 else "Hold steady..."
             init_status_text.color = color.orange
 
             if init_frames >= INIT_HOLD_FRAMES:
-                # Lock whatever hands are currently in view
                 registered_hands = {label: True for label in seen_this_frame}
                 init_state       = "locked"
                 lost_frames      = 0
+                _full_motion_reset()
                 _update_init_bar(1.0)
-                _set_init_overlay(False)   # hide overlay — session is live
+                _set_init_overlay(False)
 
-        # While not locked, draw skeletons but do NOT control model
         _draw_skeletons(rgb, seen_this_frame, res)
         _upload_frame(rgb)
         gesture_text.text  = f"Init: {init_state.upper()}"
         gesture_text.color = color.orange
-        return   # ← skip all gesture/model logic until locked
+        return
 
-    # ── SESSION ACTIVE (locked) ────────────────────────────────────────────────
-    # Filter: only allow registered hands
+    # ── SESSION ACTIVE ────────────────────────────────────────────────────────
     left  = seen_this_frame.get("Left")  if "Left"  in registered_hands else None
     right = seen_this_frame.get("Right") if "Right" in registered_hands else None
 
-    # Check if registered hand(s) are still in frame
     any_registered_visible = any(lbl in seen_this_frame for lbl in registered_hands)
     if not any_registered_visible:
         lost_frames += 1
         if lost_frames >= LOST_GRACE_FRAMES:
-            # Hand gone too long — reset
             _reset_init()
             _upload_frame(rgb)
             gesture_text.text  = "Gesture: None"
@@ -422,23 +439,53 @@ def update():
     else:
         lost_frames = 0
 
-    # Warn user if hand is about to be lost (grace period in progress)
     if lost_frames > 0:
-        gesture_text.text  = f"⚠ Hand lost! Re-init in {LOST_GRACE_FRAMES - lost_frames}…"
+        gesture_text.text  = f"Hand lost! Re-init in {LOST_GRACE_FRAMES - lost_frames}..."
         gesture_text.color = color.red
-    
-    # ── PAUSE DETECTION ───────────────────────────────────────────────────────
-    if left and is_open_palm_relaxed(left):
-        PAUSE_FRAMES += 1
+
+    # ── PAUSE — hysteresis so it doesn't flicker ──────────────────────────────
+    # Engage: need PAUSE_ENGAGE_FRAMES consecutive open-palm frames
+    # Release: need PAUSE_RELEASE_FRAMES consecutive non-open-palm frames
+    left_is_open = left is not None and is_open_palm_relaxed(left)
+
+    if not paused:
+        if left_is_open:
+            PAUSE_FRAMES  += 1
+            UNPAUSE_FRAMES = 0
+        else:
+            PAUSE_FRAMES = 0
+        if PAUSE_FRAMES >= PAUSE_ENGAGE_FRAMES:
+            paused         = True
+            UNPAUSE_FRAMES = 0
+            # Wipe tracking so resuming never jumps
+            last_rx = last_ry = None
+            last_lx = last_ly = None
+            last_zoom = None
+            smooth_rx = smooth_ry = 0.0
+            smooth_tx = smooth_ty = 0.0
+            smooth_zoom = 0.0
     else:
-        PAUSE_FRAMES = 0
-    paused = PAUSE_FRAMES >= 3
+        if not left_is_open:
+            UNPAUSE_FRAMES += 1
+            PAUSE_FRAMES    = 0
+        else:
+            UNPAUSE_FRAMES = 0
+        if UNPAUSE_FRAMES >= PAUSE_RELEASE_FRAMES:
+            paused         = False
+            PAUSE_FRAMES   = 0
+            UNPAUSE_FRAMES = 0
+            # Reset tracking so first move after unpause doesn't jump
+            last_rx = last_ry = None
+            last_lx = last_ly = None
+            last_zoom = None
+            smooth_rx = smooth_ry = 0.0
+            smooth_tx = smooth_ty = 0.0
+            smooth_zoom = 0.0
 
     current_gest = "None"
 
     if paused:
         current_gest = "Paused"
-        last_rx = last_ry = last_lx = last_ly = last_zoom = None
         if right and is_peace(right) and screenshot_cooldown == 0:
             ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             path = os.path.abspath(f"screenshots/shot_{ts}.png")
@@ -446,46 +493,77 @@ def update():
             screenshot_text.enabled = True
             screenshot_timer        = 2.0
             screenshot_cooldown     = 25
+
     else:
+        # ── ROTATION (right index finger, only when NOT pinching) ─────────────
         if right and not model_locked and not is_pinch(right):
             current_gest = "Rotating"
             ix = int(right.landmark[8].x * w_px)
             iy = int(right.landmark[8].y * h_px)
             if last_rx is not None:
-                dx, dy = ix - last_rx, iy - last_ry
-                smooth_rx = smooth_rx * (1 - alpha) + (dy * rot_sens) * alpha
-                smooth_ry = smooth_ry * (1 - alpha) + (-dx * rot_sens) * alpha
+                dx = max(-MAX_ROT_DELTA, min(MAX_ROT_DELTA, ix - last_rx))
+                dy = max(-MAX_ROT_DELTA, min(MAX_ROT_DELTA, iy - last_ry))
+                smooth_rx = smooth_rx * (1 - ALPHA_ROT) + ( dy * rot_sens) * ALPHA_ROT
+                smooth_ry = smooth_ry * (1 - ALPHA_ROT) + (-dx * rot_sens) * ALPHA_ROT
                 car.rotation_x += smooth_rx
                 car.rotation_y += smooth_ry
+            else:
+                smooth_rx = smooth_ry = 0.0
             last_rx, last_ry = ix, iy
         else:
+            smooth_rx *= ROT_DECAY
+            smooth_ry *= ROT_DECAY
             last_rx = last_ry = None
 
+        # ── ZOOM (right pinch distance) ───────────────────────────────────────
+        # Pinching closer  → zoom IN  (camera moves toward model, z increases)
+        # Pulling apart    → zoom OUT (camera moves away,          z decreases)
         if right and not camera_locked:
-            current_gest += " + Zoom" if current_gest != "None" else "Zooming"
-            lm = right.landmark
-            pd = math.dist((lm[4].x, lm[4].y), (lm[8].x, lm[8].y))
-            strength = 1 - min(1, max(0, (pd - 0.02) / 0.15))
+            label_suffix = " + Zoom" if current_gest != "None" else "Zooming"
+            current_gest += label_suffix
+            pd = pinch_distance(right)
             if last_zoom is not None:
-                delta = (strength - last_zoom) * zoom_sens
-                smooth_zoom = smooth_zoom * 0.65 + delta * 0.35
-                camera.z = clamp(camera.z - smooth_zoom, -35, -3)
-            last_zoom = strength
+                delta = pd - last_zoom          # positive = fingers moving apart
+                if abs(delta) < 0.003:
+                    delta = 0.0
+                delta = max(-MAX_ZOOM_DELTA, min(MAX_ZOOM_DELTA, delta))
+                # Fingers apart  (delta > 0) → zoom OUT → camera.z decreases (more negative)
+                # Fingers closer (delta < 0) → zoom IN  → camera.z increases (less negative)
+                delta_scaled = delta * zoom_sens * 2
+                smooth_zoom  = smooth_zoom * (1 - ALPHA_ZOOM) + delta_scaled * ALPHA_ZOOM
+                camera.z     = clamp(camera.z - smooth_zoom, -35, -3)
+            else:
+                smooth_zoom = 0.0
+            last_zoom = pd
         else:
+            smooth_zoom *= ZOOM_DECAY
             last_zoom = None
 
+        # ── TRANSLATION (left wrist) ──────────────────────────────────────────
+        # Webcam is already flipped horizontally (mirror mode).
+        # lm[0].x increases left→right on screen, y increases top→bottom.
+        # We want moving the hand right  → model moves right  (+x)
+        #           moving the hand up   → model moves up     (+y)
         if left and not model_locked:
             current_gest = "Moving"
             lx = int(left.landmark[0].x * w_px)
             ly = int(left.landmark[0].y * h_px)
             if last_lx is not None:
-                dx = (lx - last_lx) / w_px
-                dy = (ly - last_ly) / h_px
-                smooth_tx = smooth_tx * (1 - alpha) + dx * trans_sens * alpha
-                smooth_ty = smooth_ty * (1 - alpha) + dy * trans_sens * alpha
+                # dx: positive = hand moved right on screen → +x in world
+                dx =  (lx - last_lx) / w_px
+                # dy: positive = hand moved DOWN on screen  → -y in world
+                dy = -(ly - last_ly) / h_px
+                dx = max(-MAX_TRANS_DELTA, min(MAX_TRANS_DELTA, dx))
+                dy = max(-MAX_TRANS_DELTA, min(MAX_TRANS_DELTA, dy))
+                smooth_tx = smooth_tx * (1 - ALPHA_TRANS) + dx * trans_sens * ALPHA_TRANS
+                smooth_ty = smooth_ty * (1 - ALPHA_TRANS) + dy * trans_sens * ALPHA_TRANS
                 car.position += Vec3(smooth_tx, smooth_ty, 0)
+            else:
+                smooth_tx = smooth_ty = 0.0
             last_lx, last_ly = lx, ly
         else:
+            smooth_tx *= TRANS_DECAY
+            smooth_ty *= TRANS_DECAY
             last_lx = last_ly = None
 
     if lost_frames == 0:
@@ -506,12 +584,11 @@ def update():
         screenshot_cooldown -= 1
     if screenshot_timer > 0:
         screenshot_timer -= time.dt
-    if screenshot_timer <= 0:
+    if screenshot_timer <= 0 and screenshot_text.enabled:
         screenshot_text.enabled = False
 
 
 def _draw_skeletons(rgb, seen_this_frame, res, registered_hands=None):
-    """Draw landmarks; ghost out unregistered hands when session is locked."""
     if not (res.multi_hand_landmarks and res.multi_handedness):
         return
 
@@ -520,16 +597,15 @@ def _draw_skeletons(rgb, seen_this_frame, res, registered_hands=None):
     for i, hand_lms in enumerate(res.multi_hand_landmarks):
         label = res.multi_handedness[i].classification[0].label
 
-        # Decide colour: registered → normal, unregistered → dim red ghost
         if registered_hands is not None and label not in registered_hands:
-            ns  = mp_drawing.DrawingSpec(color=(60, 30, 30),  thickness=1, circle_radius=2)
-            cs  = mp_drawing.DrawingSpec(color=(50, 20, 20),  thickness=1)
-            tag_col = (80, 30, 30)
+            ns        = mp_drawing.DrawingSpec(color=(60, 30, 30), thickness=1, circle_radius=2)
+            cs        = mp_drawing.DrawingSpec(color=(50, 20, 20), thickness=1)
+            tag_col   = (80, 30, 30)
             tag_label = f"{label.upper()} (ignored)"
         else:
-            ns      = LEFT_STYLE  if label == "Left" else RIGHT_STYLE
-            cs      = LEFT_CONN   if label == "Left" else RIGHT_CONN
-            tag_col = (0, 220, 0) if label == "Left" else (50, 180, 255)
+            ns        = LEFT_STYLE  if label == "Left" else RIGHT_STYLE
+            cs        = LEFT_CONN   if label == "Left" else RIGHT_CONN
+            tag_col   = (0, 220, 0) if label == "Left" else (50, 180, 255)
             tag_label = label.upper()
 
         wx = int(hand_lms.landmark[0].x * w_px)
