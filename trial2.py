@@ -97,7 +97,7 @@ btn_side  = Button("Side",  position=(-0.615, 0.22), on_click=lambda: set_view("
 btn_top   = Button("Top",   position=(-0.725, 0.16), on_click=lambda: set_view("top"),   **vbtn)
 btn_iso   = Button("ISO",   position=(-0.615, 0.16), on_click=lambda: set_view("iso"),   **vbtn)
 
-# ── Smoothing constants ───────────────────────────────────────────────────────
+#  Smoothing constants 
 ALPHA_ROT   = 0.12
 ALPHA_TRANS = 0.10
 ALPHA_ZOOM  = 0.10
@@ -213,9 +213,6 @@ screenshot_text = Text(
     enabled=False,
 )
 
-# ─────────────────────────────────────────────────────────────
-#  HAND INITIALIZATION OVERLAY
-# ─────────────────────────────────────────────────────────────
 INIT_HOLD_FRAMES  = 45
 LOST_GRACE_FRAMES = 10
 
@@ -319,7 +316,7 @@ def is_pinch(hand):
     return pinch_distance(hand) < 0.05
 
 
-# ── Motion state ──────────────────────────────────────────────────────────────
+# motion state globals
 smooth_rx = smooth_ry = 0.0
 smooth_tx = smooth_ty = 0.0
 smooth_zoom = 0.0
@@ -399,7 +396,7 @@ def update():
 
     h_px, w_px, _ = frame.shape
 
-    # ── INITIALIZATION STATE MACHINE ─────────────────────────────────────────
+    # ── hand intitalization mode
     if init_state != "locked":
         if not seen_this_frame:
             init_frames = 0
@@ -431,7 +428,7 @@ def update():
         gesture_text.color = color.orange
         return
 
-    # ── SESSION ACTIVE ────────────────────────────────────────────────────────
+    # ── active session
     left  = seen_this_frame.get("Left")  if "Left"  in registered_hands else None
     right = seen_this_frame.get("Right") if "Right" in registered_hands else None
 
@@ -503,7 +500,7 @@ def update():
             screenshot_cooldown     = 25
 
     else:
-        # ── ROTATION (right index finger, only when NOT pinching) ─────────────
+        # rotation
         if right and not model_locked and not is_pinch(right):
             current_gest = "Rotating"
             ix = int(right.landmark[8].x * w_px)
@@ -523,9 +520,9 @@ def update():
             smooth_ry *= ROT_DECAY
             last_rx = last_ry = None
 
-        # ── ZOOM (right pinch distance) ───────────────────────────────────────
+        # zoom
         # Pinching closer  → zoom IN  (camera moves toward model, z increases)
-        # Pulling apart    → zoom OUT (camera moves away,          z decreases)
+        # Pulling apart    → zoom OUT (camera moves away,z decreases)
         if right and not camera_locked:
             label_suffix = " + Zoom" if current_gest != "None" else "Zooming"
             current_gest += label_suffix
@@ -547,11 +544,11 @@ def update():
             smooth_zoom *= ZOOM_DECAY
             last_zoom = None
 
-        # ── TRANSLATION (left wrist) ──────────────────────────────────────────
+        # TRANSLATION (left wrist)
         # Webcam is already flipped horizontally (mirror mode).
         # lm[0].x increases left→right on screen, y increases top→bottom.
-        # We want moving the hand right  → model moves right  (+x)
-        #           moving the hand up   → model moves up     (+y)
+        # We want moving the hand right  → model moves right(+x)
+        # moving the hand up   → model moves up(+y)
         if left and not model_locked:
             current_gest = "Moving"
             lx = int(left.landmark[0].x * w_px)
@@ -578,7 +575,7 @@ def update():
         gesture_text.text  = f"Gesture: {current_gest}"
         gesture_text.color = color.red if paused else color.white
 
-    # ── DRAW SKELETONS ────────────────────────────────────────────────────────
+    # DRAW SKELETONS
     _draw_skeletons(rgb, seen_this_frame, res, registered_hands)
 
     if paused:

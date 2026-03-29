@@ -24,7 +24,7 @@ TEXT_MUTE = "#243447"
 BORDER    = "#1a2d3d"
 BORDER_HI = "#00d4ff"
 
-# ── Fonts ─────────────────────────────────────────────────────────────────────
+#  Fonts
 FONT_TITLE  = ("Courier New", 26, "bold")
 FONT_SUB    = ("Courier New", 10, "normal")
 FONT_LABEL  = ("Courier New", 9,  "normal")
@@ -38,9 +38,9 @@ MODELS_DIR  = os.path.join(PROJECT_DIR, "models")
 LOCAL_MODELS_DIR=MODELS_DIR
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------
 #  Helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------
 
 def _btn_hover(btn, normal_bg, hover_bg, normal_fg=TEXT, hover_fg=BG):
     btn.bind("<Enter>", lambda e: btn.config(bg=hover_bg, fg=hover_fg))
@@ -71,12 +71,9 @@ def _draw_grid(canvas, w, h, step=28, color="#0a1520"):
         canvas.create_line(0, y, w, y, fill=color, width=1)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Animated canvas header
-# ─────────────────────────────────────────────────────────────────────────────
 
+#ANIMATED CANVAS BAR
 class HeaderCanvas(tk.Canvas):
-    """Draws an animated blueprint-style graphic behind the title."""
 
     SPEED = 0.6   # rotation speed (degrees per 16 ms tick)
 
@@ -158,9 +155,6 @@ class HeaderCanvas(tk.Canvas):
         for y in range(0, h, 4):
             self.create_line(0, y, w, y, fill="#0a0f18", width=1)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Model selector window
-# ─────────────────────────────────────────────────────────────────────────────
 
 def launch_ursina(model_name: str):
     interaction_file = os.path.join(PROJECT_DIR, "main.py")
@@ -180,7 +174,7 @@ def open_model_selector():
 
     win = _make_toplevel(root, "Select Model", 460, 520)
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    #  Header 
     hdr = tk.Frame(win, bg=PANEL, pady=0)
     hdr.pack(fill="x")
     tk.Label(hdr, text="// SELECT MODEL", fg=ACCENT, bg=PANEL,
@@ -189,7 +183,7 @@ def open_model_selector():
              font=FONT_MONO).pack(side="right", padx=20)
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
 
-    # ── Search bar ────────────────────────────────────────────────────────────
+    # Search bar 
     search_frame = tk.Frame(win, bg=BG2, padx=16, pady=10)
     search_frame.pack(fill="x")
 
@@ -217,12 +211,12 @@ def open_model_selector():
 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
 
-    # ── Status bar ────────────────────────────────────────────────────────────
+    #  Status bar
     status = tk.Label(win, text="Enter a query and press SEARCH ...", fg=TEXT_DIM,
                       bg=BG2, font=FONT_MONO, anchor="w", padx=16, pady=6)
     status.pack(fill="x")
 
-    # ── Scrollable model list ─────────────────────────────────────────────────
+    # Scrollable model list
     outer = tk.Frame(win, bg=BG, padx=16, pady=12)
     outer.pack(fill="both", expand=True)
 
@@ -241,7 +235,7 @@ def open_model_selector():
     canvas_list.bind_all("<MouseWheel>",
                          lambda e: canvas_list.yview_scroll(-1*(e.delta//120), "units"))
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    #helper funtions
     def _make_hover(r, ab, ar):
         def on_enter(e):
             r.config(bg=PANEL2); ab.config(bg=ACCENT); ar.config(fg=ACCENT, bg=PANEL2)
@@ -295,7 +289,7 @@ def open_model_selector():
             widget.bind("<Button-1>", on_click)
         r.bind("<Button-1>", on_click)
 
-    # ── Populate list from results ────────────────────────────────────────────
+    # ── Populate list from results
     def _populate(models):
         # Clear previous rows
         for widget in inner.winfo_children():
@@ -352,7 +346,7 @@ def open_model_selector():
             fg=TEXT_DIM
         )
 
-    # ── Search action ─────────────────────────────────────────────────────────
+    #Search action
     def _do_search():
         query = search_var.get().strip()
         if not query:
@@ -379,7 +373,7 @@ def open_model_selector():
     # Run default search immediately on open
     win.after(50, _do_search)
 
-    # ── Footer ────────────────────────────────────────────────────────────────
+    # Footer 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
     tk.Label(win, text="Click a model to download & launch the viewer",
              fg=TEXT_DIM, bg=BG, font=FONT_MONO, pady=8).pack()
@@ -391,10 +385,7 @@ def _all_children(widget):
         children.extend(_all_children(child))
     return children
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 #  Controls window
-# ─────────────────────────────────────────────────────────────────────────────
 
 def show_controls():
     win = _make_toplevel(root, "Gesture Controls", 420, 400)
@@ -454,9 +445,7 @@ def show_controls():
     _btn_hover(close_btn, PANEL, ACCENT, TEXT_DIM, BG)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Main window
-# ─────────────────────────────────────────────────────────────────────────────
+#main window
 
 root = tk.Tk()
 root.title("3D Interaction Controller")
@@ -467,7 +456,7 @@ root.resizable(False, False)
 # Top accent line
 tk.Frame(root, bg=ACCENT, height=2).pack(fill="x")
 
-# ── Main layout: left graphic | right content ─────────────────────────────────
+# Main layout: left graphic | right content 
 body = tk.Frame(root, bg=BG)
 body.pack(fill="both", expand=True)
 
