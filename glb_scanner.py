@@ -28,17 +28,61 @@ def load_index():
         print("Corrupted or empty database. Resetting...")
         return {}
 
+# def scan_local(root_folder):
+#     glb_files = []
+
+#     for root, dirs, files in os.walk(root_folder):
+#         for file in files:
+#             if file.lower().endswith(".glb"):
+#                 full_path = os.path.join(root, file)
+#                 glb_files.append({
+#                     "name": file,
+#                     "path": full_path,
+#                     "source": "local"
+#                 })
+
+#     return glb_files
+
 def scan_local(root_folder):
     glb_files = []
+    existing_modes = {}
+    
+    # 1. Look for database.json in the main project folder (one level up from /models)
+    project_dir = os.path.dirname(root_folder)
+    db_path = os.path.join(project_dir, "database.json")
+    
+    # Fallback just in case it actually is inside the models folder
+    if not os.path.exists(db_path):
+        db_path = os.path.join(root_folder, "database.json")
 
+    # 2. Memorize your manual tags
+    if os.path.exists(db_path):
+        try:
+            with open(db_path, "r") as f:
+                data = json.load(f)
+                for item in data.get("results", []):
+                    if "name" in item and "mode" in item:
+                        existing_modes[item["name"]] = item["mode"]
+        except Exception as e:
+            print(f"Could not read existing modes: {e}")
+
+    # 3. Scan the directory
     for root, dirs, files in os.walk(root_folder):
         for file in files:
-            if file.lower().endswith(".glb"):
+            if file.lower().endswith((".glb", ".csv", ".obj")):
                 full_path = os.path.join(root, file)
+                
+                # Smart Defaults: CSVs default to explore, 3D models default to inspect.
+                default_mode = "explore" if file.lower().endswith(".csv") else "inspect"
+                
+                # BUT if you manually changed it in database.json, this line forces it to keep your edit!
+                saved_mode = existing_modes.get(file, default_mode)
+                
                 glb_files.append({
                     "name": file,
                     "path": full_path,
-                    "source": "local"
+                    "source": "local",
+                    "mode": saved_mode
                 })
 
     return glb_files

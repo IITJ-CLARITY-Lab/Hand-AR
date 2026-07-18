@@ -1,4 +1,4 @@
-#!/home/neeli-satwik/Hand-AR/handtrack_env/bin/python3.10
+#!/home/dhaniya/Desktop/Hand-point-cloud/handtrack_env/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
