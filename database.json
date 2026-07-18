@@ -1,56 +1,96 @@
 {
   "query": "car",
-  "timestamp": 1774773976.843037,
+  "timestamp": 1784388817.4099884,
   "results": [
     {
+      "name": "pointcloud_sample.csv",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/pointcloud_sample.csv",
+      "source": "local",
+      "mode": "explore"
+    },
+    {
+      "name": "flowers.csv",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/flowers.csv",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "claustroVeleBlanco.csv",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/claustroVeleBlanco.csv",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "Cartoon_Car.glb",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/Cartoon_Car.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
       "name": "7365261af0b44c26b66d8272e5158428.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\7365261af0b44c26b66d8272e5158428.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/7365261af0b44c26b66d8272e5158428.glb",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "Bottled_car.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\Bottled_car.glb",
-      "source": "local"
-    },
-    {
-      "name": "Gislinge_Viking_Boat.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\Gislinge_Viking_Boat.glb",
-      "source": "local"
-    },
-    {
-      "name": "gorilla_tag_map.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\gorilla_tag_map.glb",
-      "source": "local"
-    },
-    {
-      "name": "ID_Card_Model.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\ID_Card_Model.glb",
-      "source": "local"
-    },
-    {
-      "name": "low_poly_mountains.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\low_poly_mountains.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/Bottled_car.glb",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "Old_Rusty_Car.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\Old_Rusty_Car.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/Old_Rusty_Car.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "Gislinge_Viking_Boat.glb",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/Gislinge_Viking_Boat.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "platanus_sample.csv",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/platanus_sample.csv",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "ryomen_sukuna_from_jujutsu_kaisen.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\ryomen_sukuna_from_jujutsu_kaisen.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/ryomen_sukuna_from_jujutsu_kaisen.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "gorilla_tag_map.glb",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/gorilla_tag_map.glb",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "vintage_racing_car.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\vintage_racing_car.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/vintage_racing_car.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "low_poly_mountains.glb",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/low_poly_mountains.glb",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "ZOMBIE_PICKUP_TRUCK.glb",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\ZOMBIE_PICKUP_TRUCK.glb",
-      "source": "local"
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/ZOMBIE_PICKUP_TRUCK.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "ID_Card_Model.glb",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/ID_Card_Model.glb",
+      "source": "local",
+      "mode": "inspect"
     },
     {
       "name": "Future Car",
@@ -92,8 +132,7 @@
       "name": "Cartoon Car",
       "uid": "a5f6a99597d34c06832e7cc07e4a6c69",
       "viewer": "https://sketchfab.com/3d-models/a5f6a99597d34c06832e7cc07e4a6c69",
-      "source": "local",
-      "path": "C:\\Users\\ASUS\\OneDrive\\Documents\\GitHub\\Hand-ArM2\\models\\Cartoon_Car.glb"
+      "source": "web"
     },
     {
       "name": "Generic passenger car pack",

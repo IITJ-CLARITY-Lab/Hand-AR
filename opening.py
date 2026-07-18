@@ -156,16 +156,30 @@ class HeaderCanvas(tk.Canvas):
             self.create_line(0, y, w, y, fill="#0a0f18", width=1)
 
 
-def launch_ursina(model_name: str):
-    interaction_file = os.path.join(PROJECT_DIR, "main.py")
+def launch_ursina(model_path: str, mode: str):
+    interaction_file = os.path.join(PROJECT_DIR, "trial2.py")
     if not os.path.exists(interaction_file):
-        # fallback to trial2.py
-        interaction_file = os.path.join(PROJECT_DIR, "trial2.py")
-    if not os.path.exists(interaction_file):
-        messagebox.showerror("Error", "main.py not found")
+        messagebox.showerror("Error", "trial2_2.py not found")
         return
-    subprocess.Popen([sys.executable, interaction_file, model_name],
+    
+    subprocess.Popen([sys.executable, interaction_file, model_path, mode],
                      cwd=PROJECT_DIR)
+# debug file 
+# def launch_point_cloud(csv_path: str):
+#     interaction_file = os.path.join(PROJECT_DIR, "plotcsv.py")
+#     if not os.path.exists(interaction_file):
+#         messagebox.showerror("Error", "plotcsv.py not found")
+#         return
+#     subprocess.Popen([sys.executable, interaction_file, csv_path],
+#                      cwd=PROJECT_DIR)
+# debug
+# def launch_explore(model_path: str):
+#     interaction_file = os.path.join(PROJECT_DIR, "explore.py")
+#     if not os.path.exists(interaction_file):
+#         messagebox.showerror("Error", "explore.py not found")
+#         return
+#     subprocess.Popen([sys.executable, interaction_file, model_path],
+#                      cwd=PROJECT_DIR)
 
 def open_model_selector():
     if not os.path.exists(MODELS_DIR):
@@ -265,7 +279,6 @@ def open_model_selector():
 
     def _make_click(m, r):
         def on_click(e):
-            # Disable further clicks while downloading
             search_btn.config(state="disabled")
             status.config(text=f"Downloading  {m['name']} ...", fg=ORANGE)
             win.update_idletasks()
@@ -277,13 +290,17 @@ def open_model_selector():
                 if not os.path.exists(path):
                     messagebox.showerror("Error", f"File not found:\n{path}")
                     return
-                print("Launching model:", path)
                 win.destroy()
-                launch_ursina(path)
+                
+                # --- UNIFIED LAUNCHER ---
+                mode = m.get("mode", "inspect")
+                print(f"Launching {mode.upper()} Mode:", path)
+                # Pass BOTH the path and the mode to your main script
+                launch_ursina(path, mode) 
+                
             else:
                 status.config(text="Download failed — try another model", fg=ORANGE)
-                messagebox.showinfo("Download failed",
-                                    "Model could not be downloaded from web")
+                messagebox.showinfo("Download failed", "Model could not be downloaded")
 
         for widget in _all_children(r):
             widget.bind("<Button-1>", on_click)
@@ -541,7 +558,7 @@ status_row.pack(anchor="w")
 def _count_models():
     if os.path.exists(MODELS_DIR):
         n = len([f for f in os.listdir(MODELS_DIR)
-                 if f.lower().endswith((".glb", ".obj"))])
+                 if f.lower().endswith((".glb", ".obj", ".csv"))]) # Added .csv
         return n
     return 0
 
