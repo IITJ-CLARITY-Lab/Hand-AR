@@ -1,4 +1,5 @@
 # Hand-ArM2
+
 ### Gesture-Based 3D Model Interaction System
 
 Hand-ArM2 is a real-time desktop application for controlling and manipulating 3D models through natural hand gestures captured via webcam — no mouse or keyboard required.
@@ -9,30 +10,32 @@ Hand-ArM2 is a real-time desktop application for controlling and manipulating 3D
 
 **Gesture Controls**
 
-| Gesture | Action |
-|---|---|
-| Index finger movement | Rotate model |
-| Pinch | Zoom in / out |
-| Wrist movement | Pan / move model |
-| Open palm | Pause interaction |
-| Peace sign | Capture screenshot |
+| Gesture               | Action             |
+| --------------------- | ------------------ |
+| Index finger movement | Rotate model       |
+| Pinch                 | Zoom in / out      |
+| Wrist movement        | Pan / move model   |
+| Open palm             | Pause interaction  |
+| Peace sign            | Capture screenshot |
 
 **3D Model Support**
+
 - Search and download models directly from Sketchfab (free API key required)
 - Load local `.glb` and `.obj` files
 
 **Performance Monitoring**
+
 - Real-time FPS, CPU, and RAM stats displayed during interaction
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| 3D Rendering | Ursina, Panda3D |
-| Hand Tracking | MediaPipe, OpenCV |
-| GUI | Tkinter |
+| Layer          | Technology              |
+| -------------- | ----------------------- |
+| 3D Rendering   | Ursina, Panda3D         |
+| Hand Tracking  | MediaPipe, OpenCV       |
+| GUI            | Tkinter                 |
 | Model Download | Sketchfab API, Requests |
 
 ---
@@ -69,12 +72,14 @@ cd Hand-ArM2
 ### Step 2 — Create a virtual environment
 
 **Windows:**
+
 ```bash
 py -3.10 -m venv handtrack_env
 handtrack_env\Scripts\activate
 ```
 
 **macOS / Linux:**
+
 ```bash
 python3.10 -m venv handtrack_env
 source handtrack_env/bin/activate
@@ -121,3 +126,12 @@ psutil>=5.9.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 ```
+
+
+
+IMP 
+
+the csv files are not included
+download it from : [drive.google.com/drive/folders/1g7xOP7ZgGnuZT_P6auts-jEuGTKHHnw9?usp=sharing](https://drive.google.com/drive/folders/1g7xOP7ZgGnuZT_P6auts-jEuGTKHHnw9?usp=sharing)
+
+save them in the models folder
