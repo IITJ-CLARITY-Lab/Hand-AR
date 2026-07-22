@@ -1,5 +1,6 @@
 import pandas as pd
 from covariance_align import auto_align_up_axis
+from plyRead import load_ply  
 from ursina import *
 from panda3d.core import Texture as P3DTexture, Filename
 from ursina.prefabs.first_person_controller import FirstPersonController
@@ -13,7 +14,6 @@ import os
 import sys
 import time
 import psutil
-
 
 selected_model = None
 viewer_mode = "inspect" # Default mode if none is passed
@@ -49,14 +49,20 @@ if viewer_mode == "inspect":
     print("--- SETUP: INSPECT MODE ---")
     car = Entity()
     
-    if model_path.lower().endswith(".csv"):
-        df = pd.read_csv(model_path)
-        df = df.iloc[::10]
+    # --- SMART LOADER FOR CSV & PLY ---
+    if model_path.lower().endswith((".csv", ".ply")):
+        if model_path.lower().endswith(".ply"):
+            df = load_ply(model_path, step=10)
+        else:
+            df = pd.read_csv(model_path)
+            df = df.iloc[::10]
+            
         df = auto_align_up_axis(df)
         vertices = [Vec3(x, y, z) for x, y, z in zip(df["x"], df["y"], df["z"])]
         point_colors = [(r / 255.0, g / 255.0, b / 255.0, 1.0) for r, g, b in zip(df["r"], df["g"], df["b"])]
         car.model = Mesh(vertices=vertices, colors=point_colors, mode='point', thickness=0.009)
     else:
+        # GLB/OBJ Loader
         panda_path = Filename.from_os_specific(model_path)
         loaded = base.loader.load_model(panda_path) 
         if loaded is None: sys.exit(1)
@@ -123,8 +129,14 @@ if viewer_mode == "inspect":
 
 elif viewer_mode == "explore":
     print("--- SETUP: EXPLORE MODE ---")
-    df = pd.read_csv(model_path)
-    df = df.iloc[::10] 
+    
+    # --- SMART LOADER FOR CSV & PLY ---
+    if model_path.lower().endswith(".ply"):
+        df = load_ply(model_path, step=10)
+    else:
+        df = pd.read_csv(model_path)
+        df = df.iloc[::10] 
+        
     df = auto_align_up_axis(df)
 
     global_points_xz = np.array([df["x"], df["z"]]).T
@@ -142,7 +154,14 @@ elif viewer_mode == "explore":
     player.gravity = 0 
     player.speed = 0 
     player.mouse_sensitivity = Vec2(0, 0) 
-    player.prev_x, player.prev_z = player.x, player.z
+    
+    # --- DYNAMIC SPAWN POSITION ---
+    player.x = df['x'].mean()
+    player.z = df['z'].mean()
+    player.y = df['y'].max() + 5.0  # Drop from 5 units above the highest point
+
+    player.prev_x = player.x
+    player.prev_z = player.z
     
     is_flying = False
     flight_toggle_cooldown = 4 
@@ -311,6 +330,7 @@ elif viewer_mode == "explore":
                 if results.multi_hand_landmarks:
                     for idx, hand_lms in enumerate(results.multi_hand_landmarks):
                         hand_type = results.multi_handedness[idx].classification[0].label
+                        # Instantly shuts down everything and returns to menu
                         st = self.state[hand_type]
                         st['visible'] = True
                         st['x'], st['y'] = hand_lms.landmark[0].x, hand_lms.landmark[0].y
@@ -431,6 +451,7 @@ def update():
             for i, h in enumerate(res.multi_handedness):
                 label = h.classification[0].label
                 seen_this_frame[label] = res.multi_hand_landmarks[i]
+
 
         h_px, w_px, _ = frame.shape
 

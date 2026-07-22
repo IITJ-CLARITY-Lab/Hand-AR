@@ -5,7 +5,7 @@ import os
 import sys
 import math
 import time
-from glb_scanner import unified_search,download_glb
+from glb_scanner import unified_search, download_glb
 
 
 # ── Palette ───────────────────────────────────────────────────────────────────
@@ -38,6 +38,8 @@ MODELS_DIR  = os.path.join(PROJECT_DIR, "models")
 LOCAL_MODELS_DIR=MODELS_DIR
 
 
+
+
 # ---------
 #  Helpers
 # ---------
@@ -54,13 +56,11 @@ def _make_toplevel(parent, title, w, h):
     win.configure(bg=BG)
     win.resizable(False, False)
     win.grab_set()
-    # Thin accent top border
     tk.Frame(win, bg=ACCENT, height=2).pack(fill="x")
     return win
 
 
 def _corner_tag(canvas, x, y, size=10, color=ACCENT_DIM):
-    """Draw a corner bracket at (x,y). Used for technical framing."""
     canvas.create_line(x, y + size, x, y, x + size, y, fill=color, width=1)
 
 
@@ -75,7 +75,7 @@ def _draw_grid(canvas, w, h, step=28, color="#0a1520"):
 #ANIMATED CANVAS BAR
 class HeaderCanvas(tk.Canvas):
 
-    SPEED = 0.6   # rotation speed (degrees per 16 ms tick)
+    SPEED = 0.6   
 
     def __init__(self, parent, **kw):
         super().__init__(parent, **kw)
@@ -101,15 +101,12 @@ class HeaderCanvas(tk.Canvas):
         h = int(self["height"])
         cx, cy = w // 2, h // 2
 
-        # Background grid
         _draw_grid(self, w, h, step=24, color="#090f18")
 
-        # Rotating outer ring
         r_outer = 54
         r_inner = 40
         a = math.radians(self._angle)
 
-        # Dashed orbit ring
         for i in range(0, 360, 6):
             ia = math.radians(i)
             x0 = cx + r_outer * math.cos(ia)
@@ -117,7 +114,6 @@ class HeaderCanvas(tk.Canvas):
             if i % 12 == 0:
                 self.create_oval(x0-1.5, y0-1.5, x0+1.5, y0+1.5, fill=ACCENT_DIM, outline="")
 
-        # 3 rotating spoke tips
         for k in range(3):
             ak = a + math.radians(k * 120)
             x1 = cx + r_inner * math.cos(ak)
@@ -126,11 +122,9 @@ class HeaderCanvas(tk.Canvas):
             y2 = cy + r_outer * math.sin(ak)
             self.create_line(cx, cy, x2, y2, fill=ACCENT_DIM, width=1)
             self.create_oval(x2-3, y2-3, x2+3, y2+3, fill=ACCENT, outline="")
-            # small crosshair at spoke tip
             self.create_line(x2-5, y2, x2+5, y2, fill=ACCENT, width=1)
             self.create_line(x2, y2-5, x2, y2+5, fill=ACCENT, width=1)
 
-        # Counter-rotating inner triangle
         for k in range(3):
             ak = -a * 1.5 + math.radians(k * 120)
             bk = -a * 1.5 + math.radians((k+1) * 120)
@@ -140,62 +134,72 @@ class HeaderCanvas(tk.Canvas):
             y2 = cy + 22 * math.sin(bk)
             self.create_line(x1, y1, x2, y2, fill=ACCENT2, width=1)
 
-        # Centre dot
         self.create_oval(cx-5, cy-5, cx+5, cy+5, fill=ACCENT, outline=BG, width=2)
         self.create_oval(cx-2, cy-2, cx+2, cy+2, fill="white", outline="")
 
-        # Corner brackets around canvas
         pad = 8
         size = 14
         for bx, by in [(pad, pad), (w-pad-size, pad),
                        (pad, h-pad-size), (w-pad-size, h-pad-size)]:
             _corner_tag(self, bx, by, size, ACCENT_DIM)
 
-        # Scanline overlay — subtle horizontal lines
         for y in range(0, h, 4):
             self.create_line(0, y, w, y, fill="#0a0f18", width=1)
 
 
 def launch_ursina(model_path: str, mode: str):
+    # NOW LAUNCHES TRIAL2_4.PY
     interaction_file = os.path.join(PROJECT_DIR, "trial2.py")
     if not os.path.exists(interaction_file):
-        messagebox.showerror("Error", "trial2_2.py not found")
+        messagebox.showerror("Error", "trial2.py not found")
         return
     
     subprocess.Popen([sys.executable, interaction_file, model_path, mode],
                      cwd=PROJECT_DIR)
-# debug file 
-# def launch_point_cloud(csv_path: str):
-#     interaction_file = os.path.join(PROJECT_DIR, "plotcsv.py")
-#     if not os.path.exists(interaction_file):
-#         messagebox.showerror("Error", "plotcsv.py not found")
-#         return
-#     subprocess.Popen([sys.executable, interaction_file, csv_path],
-#                      cwd=PROJECT_DIR)
-# debug
-# def launch_explore(model_path: str):
-#     interaction_file = os.path.join(PROJECT_DIR, "explore.py")
-#     if not os.path.exists(interaction_file):
-#         messagebox.showerror("Error", "explore.py not found")
-#         return
-#     subprocess.Popen([sys.executable, interaction_file, model_path],
-#                      cwd=PROJECT_DIR)
+
 
 def open_model_selector():
     if not os.path.exists(MODELS_DIR):
         messagebox.showerror("Error", "models/ folder not found")
         return
 
-    win = _make_toplevel(root, "Select Model", 460, 520)
+    win = _make_toplevel(root, "Select Model", 460, 560)
+
+    # --- STATE VARIABLES FOR TABS ---
+    current_tab = "inspect"
+    last_results = []
 
     #  Header 
     hdr = tk.Frame(win, bg=PANEL, pady=0)
     hdr.pack(fill="x")
-    tk.Label(hdr, text="// SELECT MODEL", fg=ACCENT, bg=PANEL,
+    tk.Label(hdr, text="// SELECT DATASET", fg=ACCENT, bg=PANEL,
              font=FONT_HDR, padx=20, pady=14).pack(side="left")
-    tk.Label(hdr, text=".glb  .obj", fg=TEXT_DIM, bg=PANEL,
-             font=FONT_MONO).pack(side="right", padx=20)
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
+
+    # --- CUSTOM TABS UI ---
+    tab_frame = tk.Frame(win, bg=BG2)
+    tab_frame.pack(fill="x")
+    
+    btn_inspect = tk.Button(tab_frame, text="INSPECT\n[ .glb / .obj ]", bg=ACCENT, fg=BG, font=FONT_BTN_SM, relief="flat", bd=0, cursor="hand2", pady=8)
+    btn_explore = tk.Button(tab_frame, text="EXPLORE\n[ .ply ]", bg=PANEL2, fg=TEXT_DIM, font=FONT_BTN_SM, relief="flat", bd=0, cursor="hand2", pady=8)
+    
+    btn_inspect.pack(side="left", fill="x", expand=True)
+    btn_explore.pack(side="left", fill="x", expand=True)
+    tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
+
+    def set_tab(tab_name):
+        nonlocal current_tab
+        current_tab = tab_name
+        if tab_name == "inspect":
+            btn_inspect.config(bg=ACCENT, fg=BG)
+            btn_explore.config(bg=PANEL2, fg=TEXT_DIM)
+        else:
+            btn_inspect.config(bg=PANEL2, fg=TEXT_DIM)
+            btn_explore.config(bg=ACCENT, fg=BG)
+        _populate(last_results)
+
+    btn_inspect.config(command=lambda: set_tab("inspect"))
+    btn_explore.config(command=lambda: set_tab("explore"))
 
     # Search bar 
     search_frame = tk.Frame(win, bg=BG2, padx=16, pady=10)
@@ -280,7 +284,7 @@ def open_model_selector():
     def _make_click(m, r):
         def on_click(e):
             search_btn.config(state="disabled")
-            status.config(text=f"Downloading  {m['name']} ...", fg=ORANGE)
+            status.config(text=f"Loading  {m['name']} ...", fg=ORANGE)
             win.update_idletasks()
 
             path = download_glb(m, LOCAL_MODELS_DIR)
@@ -292,11 +296,10 @@ def open_model_selector():
                     return
                 win.destroy()
                 
-                # --- UNIFIED LAUNCHER ---
-                mode = m.get("mode", "inspect")
-                print(f"Launching {mode.upper()} Mode:", path)
-                # Pass BOTH the path and the mode to your main script
-                launch_ursina(path, mode) 
+                # --- LAUNCH USING THE MODE FROM DATABASE.JSON ---
+                actual_mode = m.get("mode", current_tab)
+                print(f"Launching {actual_mode.upper()} Mode:", path)
+                launch_ursina(path, actual_mode) 
                 
             else:
                 status.config(text="Download failed — try another model", fg=ORANGE)
@@ -308,19 +311,34 @@ def open_model_selector():
 
     # ── Populate list from results
     def _populate(models):
+        nonlocal last_results
+        last_results = models
+
         # Clear previous rows
         for widget in inner.winfo_children():
             widget.destroy()
 
-        if not models:
-            tk.Label(inner, text="No results found — try a different query",
+        # --- SMART FILTER: BASED ON DATABASE.JSON MODE ---
+        filtered_models = []
+        for m in models:
+            name = m.get("name", "").lower()
+            
+            # Use the mode from database.json (with smart fallbacks if not tagged yet)
+            fallback_mode = "explore" if name.endswith((".csv", ".ply")) else "inspect"
+            actual_mode = m.get("mode", fallback_mode)
+            
+            # Only show it in this tab if the mode matches!
+            if actual_mode == current_tab:
+                filtered_models.append(m)
+
+        if not filtered_models:
+            tk.Label(inner, text=f"No {current_tab} files found.",
                      fg=ORANGE, bg=BG, font=FONT_LABEL, pady=20).pack()
-            status.config(text="0 results", fg=TEXT_DIM)
+            status.config(text="0 results in this tab", fg=TEXT_DIM)
             return
 
-        # Local first, then web
-        local_models = [m for m in models if m["source"] == "local"]
-        web_models   = [m for m in models if m["source"] == "web"]
+        local_models = [m for m in filtered_models if m["source"] == "local"]
+        web_models   = [m for m in filtered_models if m["source"] == "web"]
         ordered      = local_models + web_models
 
         visible = 0
@@ -373,7 +391,6 @@ def open_model_selector():
         win.update_idletasks()
 
         try:
-            # use_cache=False so a new query always hits the web fresh
             results = unified_search(MODELS_DIR, query=query, use_cache=False)
         except Exception as ex:
             status.config(text=f"Search error: {ex}", fg=ORANGE)
@@ -384,13 +401,9 @@ def open_model_selector():
         _populate(results)
 
     search_btn.config(command=_do_search)
-    # Also trigger search on Enter key inside the entry
     search_entry.bind("<Return>", lambda e: _do_search())
-
-    # Run default search immediately on open
     win.after(50, _do_search)
 
-    # Footer 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
     tk.Label(win, text="Click a model to download & launch the viewer",
              fg=TEXT_DIM, bg=BG, font=FONT_MONO, pady=8).pack()
@@ -402,54 +415,111 @@ def _all_children(widget):
         children.extend(_all_children(child))
     return children
 
+
+
 #  Controls window
 
 def show_controls():
-    win = _make_toplevel(root, "Gesture Controls", 420, 400)
+    # Made the window slightly taller to fit the Explore controls
+    win = _make_toplevel(root, "Gesture Controls", 480, 560)
 
     tk.Label(win, text="// GESTURE CONTROLS", fg=ACCENT, bg=BG,
              font=FONT_HDR, pady=14).pack()
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x", padx=20)
 
-    card = tk.Frame(win, bg=PANEL, padx=24, pady=16)
-    card.pack(padx=20, pady=16, fill="x")
+    # --- TABS FOR CONTROLS ---
+    tab_frame = tk.Frame(win, bg=BG2)
+    tab_frame.pack(fill="x", padx=20, pady=(10, 0))
+    
+    btn_inspect = tk.Button(tab_frame, text="INSPECT MODE", bg=ACCENT, fg=BG, font=FONT_BTN_SM, relief="flat", bd=0, cursor="hand2", pady=8)
+    btn_explore = tk.Button(tab_frame, text="EXPLORE MODE", bg=PANEL2, fg=TEXT_DIM, font=FONT_BTN_SM, relief="flat", bd=0, cursor="hand2", pady=8)
+    
+    btn_inspect.pack(side="left", fill="x", expand=True)
+    btn_explore.pack(side="left", fill="x", expand=True)
 
-    sections = [
-        ("RIGHT HAND", [
-            ("Index finger move",    "Rotate model"),
-            ("Pinch (close)",        "Zoom in"),
-            ("Pinch (apart)",        "Zoom out"),
-            ("Peace sign [paused]",  "Screenshot"),
-        ]),
-        ("LEFT HAND", [
-            ("Open palm",            "Pause all input"),
-            ("Wrist move",           "Translate model"),
-        ]),
-    ]
+    # Content Area for the gestures
+    content_frame = tk.Frame(win, bg=PANEL, padx=16, pady=10)
+    content_frame.pack(padx=20, pady=(0, 16), fill="both", expand=True)
 
-    for section, rows in sections:
-        # Section header with left stripe
-        hdr_row = tk.Frame(card, bg=PANEL)
-        hdr_row.pack(fill="x", pady=(10, 4))
-        tk.Frame(hdr_row, bg=ACCENT, width=3, height=16).pack(side="left", padx=(0, 8))
-        tk.Label(hdr_row, text=section, fg=ACCENT, bg=PANEL,
-                 font=("Courier New", 9, "bold")).pack(side="left")
+    def render_controls(mode):
+        # Clear previous controls
+        for widget in content_frame.winfo_children():
+            widget.destroy()
 
-        for gesture, action in rows:
-            row = tk.Frame(card, bg=PANEL)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=f"  {gesture}", fg=TEXT_DIM, bg=PANEL,
-                     font=FONT_MONO, width=26, anchor="w").pack(side="left")
-            tk.Label(row, text="->", fg=ACCENT_DIM, bg=PANEL,
-                     font=FONT_MONO).pack(side="left", padx=4)
-            tk.Label(row, text=action, fg=TEXT, bg=PANEL,
-                     font=("Courier New", 9, "bold"), anchor="w").pack(side="left")
+        if mode == "inspect":
+            sections = [
+                ("RIGHT HAND", [
+                    ("Index finger move",    "Rotate model"),
+                    ("Pinch (close)",        "Zoom in"),
+                    ("Pinch (apart)",        "Zoom out"),
+                    ("Peace sign [paused]",  "Screenshot"),
+                ]),
+                ("LEFT HAND", [
+                    ("Open palm",            "Pause all input"),
+                    ("Wrist move",           "Translate model"),
+                ]),
+            ]
+            tip_text = "TIP: Hold open palm for ~0.25s to engage pause."
+        else: # explore mode
+            sections = [
+                ("RIGHT HAND (ALWAYS ACTIVE)", [
+                    ("Open Palm",            "Enable View Control"),
+                    ("Fist",                 "Freeze View"),
+                    ("Move Hand Up/Down",    "Look Around"),
+                ]),
+                ("LEFT HAND (WALK MODE)", [
+                    ("Peace Sign",           "Toggle Flight Mode"),
+                    ("Palm Up/Down",         "Move Forward/Backward"),
+                    ("Fist",                 "Stop"),
+                ]),
+                ("LEFT HAND (FLIGHT MODE)", [
+                    ("Thumbs Up",            "Position Reset"),
+                    ("Peace Sign",           "Toggle Walk Mode"),
+                    ("Index Up/Down",        "Fly Up/Down"),
+                    ("Palm Up/Down",         "Fly Forward/Backward"),
+                    ("Fist",                 "Stop"),
+                ]),
+            ]
+            tip_text = "TIP: Use Thumbs Up to respawn if you get lost!"
+
+        # Draw the sections
+        for section, rows in sections:
+            hdr_row = tk.Frame(content_frame, bg=PANEL)
+            hdr_row.pack(fill="x", pady=(8, 4))
+            tk.Frame(hdr_row, bg=ACCENT, width=3, height=16).pack(side="left", padx=(0, 8))
+            tk.Label(hdr_row, text=section, fg=ACCENT, bg=PANEL,
+                     font=("Courier New", 9, "bold")).pack(side="left")
+
+            for gesture, action in rows:
+                row = tk.Frame(content_frame, bg=PANEL)
+                row.pack(fill="x", pady=1)
+                tk.Label(row, text=f"  {gesture}", fg=TEXT_DIM, bg=PANEL,
+                         font=FONT_MONO, width=22, anchor="w").pack(side="left")
+                tk.Label(row, text="->", fg=ACCENT_DIM, bg=PANEL,
+                         font=FONT_MONO).pack(side="left", padx=4)
+                tk.Label(row, text=action, fg=TEXT, bg=PANEL,
+                         font=("Courier New", 9, "bold"), anchor="w").pack(side="left")
+        
+        # Update tip text
+        tip_label.config(text=tip_text)
+
+    def set_tab(tab_name):
+        if tab_name == "inspect":
+            btn_inspect.config(bg=ACCENT, fg=BG)
+            btn_explore.config(bg=PANEL2, fg=TEXT_DIM)
+        else:
+            btn_inspect.config(bg=PANEL2, fg=TEXT_DIM)
+            btn_explore.config(bg=ACCENT, fg=BG)
+        render_controls(tab_name)
+
+    btn_inspect.config(command=lambda: set_tab("inspect"))
+    btn_explore.config(command=lambda: set_tab("explore"))
 
     # Tip box
     tip = tk.Frame(win, bg=ACCENT_DIM, padx=14, pady=10)
     tip.pack(padx=20, fill="x")
-    tk.Label(tip, text="TIP  Hold open palm for ~0.25s to engage pause.",
-             fg=ACCENT, bg=ACCENT_DIM, font=FONT_MONO, anchor="w").pack(fill="x")
+    tip_label = tk.Label(tip, text="", fg=ACCENT, bg=ACCENT_DIM, font=FONT_MONO, anchor="w")
+    tip_label.pack(fill="x")
 
     close_btn = tk.Button(
         win, text="[ CLOSE ]", width=14,
@@ -461,7 +531,8 @@ def show_controls():
     close_btn.pack(pady=16)
     _btn_hover(close_btn, PANEL, ACCENT, TEXT_DIM, BG)
 
-
+    # Initialize with Inspect tab
+    set_tab("inspect")
 #main window
 
 root = tk.Tk()
@@ -470,14 +541,11 @@ root.geometry("620x420")
 root.configure(bg=BG)
 root.resizable(False, False)
 
-# Top accent line
 tk.Frame(root, bg=ACCENT, height=2).pack(fill="x")
 
-# Main layout: left graphic | right content 
 body = tk.Frame(root, bg=BG)
 body.pack(fill="both", expand=True)
 
-# Left panel — animated graphic
 left = tk.Frame(body, bg=BG2, width=180)
 left.pack(side="left", fill="y")
 left.pack_propagate(False)
@@ -486,40 +554,31 @@ anim = HeaderCanvas(left, width=180, height=300,
                     bg=BG2, highlightthickness=0)
 anim.pack(pady=(30, 0))
 
-# Version / build tag
-tk.Label(left, text="v2.0.0", fg=TEXT_MUTE, bg=BG2,
+tk.Label(left, text="v2.1.0", fg=TEXT_MUTE, bg=BG2,
          font=FONT_MONO).pack(side="bottom", pady=10)
 tk.Label(left, text="BUILD", fg=TEXT_MUTE, bg=BG2,
          font=FONT_MONO).pack(side="bottom")
 
-# Vertical separator
 tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
 
-# Right panel — title + buttons
 right = tk.Frame(body, bg=BG, padx=36)
 right.pack(side="left", fill="both", expand=True)
 
-# Spacer
 tk.Frame(right, bg=BG, height=40).pack()
 
-# Tag line above title
 tk.Label(right, text="// GESTURE-BASED 3D VIEWER",
          fg=ACCENT, bg=BG, font=FONT_LABEL, anchor="w").pack(fill="x")
 
-# Title
 tk.Label(right, text="3D INTERACTION\nCONTROLLER",
          fg=TEXT, bg=BG, font=FONT_TITLE,
          justify="left", anchor="w", pady=4).pack(fill="x")
 
-# Subtitle
 tk.Label(right, text="Real-time hand gesture control for 3D model viewing",
          fg=TEXT_DIM, bg=BG, font=FONT_SUB,
          wraplength=340, justify="left", anchor="w").pack(fill="x", pady=(0, 28))
 
-# Horizontal rule
 tk.Frame(right, bg=BORDER, height=1).pack(fill="x", pady=(0, 24))
 
-# Buttons
 btn_area = tk.Frame(right, bg=BG)
 btn_area.pack(anchor="w")
 
@@ -549,16 +608,15 @@ ctrl_btn = tk.Button(
 ctrl_btn.grid(row=0, column=1, pady=4)
 _btn_hover(ctrl_btn, PANEL, PANEL2, TEXT_DIM, TEXT)
 
-# Status row
 tk.Frame(right, bg=BG, height=20).pack()
 status_row = tk.Frame(right, bg=BG)
 status_row.pack(anchor="w")
 
-# Models count indicator
+# Models count indicator (Includes .ply)
 def _count_models():
     if os.path.exists(MODELS_DIR):
         n = len([f for f in os.listdir(MODELS_DIR)
-                 if f.lower().endswith((".glb", ".obj", ".csv"))]) # Added .csv
+                 if f.lower().endswith((".glb", ".obj", ".ply"))])
         return n
     return 0
 
@@ -569,11 +627,10 @@ tk.Label(status_row, text="●", fg=dot_color, bg=BG,
 tk.Label(status_row, text=f"  {n} model(s) in models/",
          fg=TEXT_DIM, bg=BG, font=FONT_MONO).pack(side="left")
 
-# Bottom bar
 tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
 foot = tk.Frame(root, bg=BG2, pady=6)
 foot.pack(fill="x")
-tk.Label(foot, text="Place .glb or .obj files in the models/ folder",
+tk.Label(foot, text="Place files in the models/ folder",
          fg=TEXT_MUTE, bg=BG2, font=FONT_MONO).pack(side="left", padx=16)
 tk.Label(foot, text="[  READY  ]",
          fg=GREEN, bg=BG2, font=FONT_MONO).pack(side="right", padx=16)

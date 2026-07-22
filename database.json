@@ -1,22 +1,10 @@
 {
   "query": "car",
-  "timestamp": 1784388817.4099884,
+  "timestamp": 1784756308.9980404,
   "results": [
     {
-      "name": "pointcloud_sample.csv",
-      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/pointcloud_sample.csv",
-      "source": "local",
-      "mode": "explore"
-    },
-    {
-      "name": "flowers.csv",
-      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/flowers.csv",
-      "source": "local",
-      "mode": "inspect"
-    },
-    {
-      "name": "claustroVeleBlanco.csv",
-      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/claustroVeleBlanco.csv",
+      "name": "flowers.ply",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/flowers.ply",
       "source": "local",
       "mode": "inspect"
     },
@@ -51,12 +39,6 @@
       "mode": "inspect"
     },
     {
-      "name": "platanus_sample.csv",
-      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/platanus_sample.csv",
-      "source": "local",
-      "mode": "inspect"
-    },
-    {
       "name": "ryomen_sukuna_from_jujutsu_kaisen.glb",
       "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/ryomen_sukuna_from_jujutsu_kaisen.glb",
       "source": "local",
@@ -69,10 +51,28 @@
       "mode": "inspect"
     },
     {
+      "name": "IIMAS_5mill.ply",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/IIMAS_5mill.ply",
+      "source": "local",
+      "mode": "explore"
+    },
+    {
+      "name": "platanus-occidentalis-01.ply",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/platanus-occidentalis-01.ply",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
       "name": "vintage_racing_car.glb",
       "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/vintage_racing_car.glb",
       "source": "local",
       "mode": "inspect"
+    },
+    {
+      "name": "ground_pointcloud.ply",
+      "path": "/home/dhaniya/Desktop/Hand-point-cloud/models/ground_pointcloud.ply",
+      "source": "local",
+      "mode": "explore"
     },
     {
       "name": "low_poly_mountains.glb",

@@ -47,15 +47,13 @@ def scan_local(root_folder):
     glb_files = []
     existing_modes = {}
     
-    # 1. Look for database.json in the main project folder (one level up from /models)
+    # 1. Look for database.json
     project_dir = os.path.dirname(root_folder)
     db_path = os.path.join(project_dir, "database.json")
-    
-    # Fallback just in case it actually is inside the models folder
     if not os.path.exists(db_path):
         db_path = os.path.join(root_folder, "database.json")
 
-    # 2. Memorize your manual tags
+    # 2. Memorize manual tags
     if os.path.exists(db_path):
         try:
             with open(db_path, "r") as f:
@@ -69,13 +67,13 @@ def scan_local(root_folder):
     # 3. Scan the directory
     for root, dirs, files in os.walk(root_folder):
         for file in files:
-            if file.lower().endswith((".glb", ".csv", ".obj")):
+            # ---> ADDED .ply HERE <---
+            if file.lower().endswith((".glb", ".csv", ".ply", ".obj")):
                 full_path = os.path.join(root, file)
                 
-                # Smart Defaults: CSVs default to explore, 3D models default to inspect.
-                default_mode = "explore" if file.lower().endswith(".csv") else "inspect"
+                # ---> TAG BOTH CSV AND PLY AS EXPLORE <---
+                default_mode = "explore" if file.lower().endswith((".csv", ".ply")) else "inspect"
                 
-                # BUT if you manually changed it in database.json, this line forces it to keep your edit!
                 saved_mode = existing_modes.get(file, default_mode)
                 
                 glb_files.append({
@@ -97,7 +95,7 @@ def search_web(query="car"):
     }
 
     try:
-        res = requests.get(url, params=params)
+        res = requests.get(url, params=params, timeout=5)
         data = res.json()
 
         for model in data.get("results", []):            
