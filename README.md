@@ -463,6 +463,75 @@ The focus of the project is responsive real-time interaction rather than full-re
 
 ---
 
+# Point Cloud Rendering Configuration
+
+Hand-ArM2 is designed to run efficiently on resource-constrained embedded platforms such as the Raspberry Pi 5. Rendering performance is heavily influenced by the size and density of the loaded point cloud. Two parameters play a significant role in balancing rendering quality and application responsiveness.
+
+## Point Sampling (`step`)
+
+Point clouds are loaded using the `load_ply()` function, which includes a configurable sampling parameter:
+
+```python
+df = load_ply(model_path, step=10)
+```
+
+The `step` value determines the sampling interval while loading a point cloud.
+
+* `step = 1` → Loads every point (highest quality, highest computational cost).
+* `step = 5` → Loads every fifth point.
+* `step = 10` → Loads every tenth point (recommended default).
+* Higher values reduce the number of rendered points and improve performance.
+
+Since different datasets contain varying numbers of points, the optimal sampling value depends on the complexity of the model being visualized. Large point clouds may require a larger sampling interval to maintain smooth interaction and stable frame rates on Raspberry Pi hardware.
+
+Users are encouraged to adjust this value according to the size of their dataset and the desired rendering performance.
+
+---
+
+## Point Thickness
+
+Point clouds are rendered using Ursina's point mesh:
+
+```python
+car.model = Mesh(
+    vertices=vertices,
+    colors=point_colors,
+    mode="point",
+    thickness=0.009
+)
+```
+
+The `thickness` parameter controls the visual size of each rendered point.
+
+For **Ursina Engine 7.0.0**, smaller thickness values generally produce smoother rendering and better visualization, particularly for dense point clouds. Excessively large values can result in overlapping points, reduced visual clarity, and decreased rendering performance.
+
+The default value:
+
+```python
+thickness = 0.009
+```
+
+has been found to provide a good balance between visibility and rendering efficiency on Raspberry Pi 5.
+
+Depending on the density and scale of the loaded dataset, users may manually adjust this value within the source code to obtain the most suitable visualization for their application.
+
+---
+
+## Performance Recommendations
+
+For the best experience on Raspberry Pi 5:
+
+| Dataset Size               | Recommended`step` | Recommended`thickness` |
+| :------------------------- | :-----------------: | :----------------------: |
+| Small (< 500K points)      |     `1 – 5`     |        `0.009`        |
+| Medium (500K – 2M points) |     `5 – 10`     |        `0.009`        |
+| Large (> 2M points)        |    `10 – 20`    |    `0.007 – 0.009`    |
+| Very Large (> 10M points)  |       `20+`       |    `0.005 – 0.008`    |
+
+These values serve as general guidelines and may be adjusted depending on the hardware configuration and the complexity of the point cloud being rendered.
+
+---
+
 # Project Structure
 
 ```text
