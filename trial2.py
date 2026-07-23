@@ -38,6 +38,7 @@ else:
         sys.exit(1)
 
 app = Ursina()
+window.fullscreen = True
 window.color = color.color(0, 0, 0.08)
 os.makedirs("screenshots", exist_ok=True)
 

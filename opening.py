@@ -89,11 +89,11 @@ class HeaderCanvas(tk.Canvas):
         if self._after_id:
             self.after_cancel(self._after_id)
             self._after_id = None
-
+    
     def _tick(self):
         self._angle = (self._angle + self.SPEED) % 360
-        self._draw()
-        self._after_id = self.after(16, self._tick)
+        # self._draw()
+        self._after_id = self.after(40, self._tick)
 
     def _draw(self):
         self.delete("all")
@@ -402,7 +402,7 @@ def open_model_selector():
 
     search_btn.config(command=_do_search)
     search_entry.bind("<Return>", lambda e: _do_search())
-    win.after(50, _do_search)
+    win.after(300, _do_search)
 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
     tk.Label(win, text="Click a model to download & launch the viewer",
@@ -537,9 +537,11 @@ def show_controls():
 
 root = tk.Tk()
 root.title("3D Interaction Controller")
-root.geometry("620x420")
+# root.geometry("620x420")
+root.attributes('-fullscreen', True)
 root.configure(bg=BG)
 root.resizable(False, False)
+root.bind("<Escape>", lambda e: root.destroy())
 
 tk.Frame(root, bg=ACCENT, height=2).pack(fill="x")
 
