@@ -1,4 +1,8 @@
-# this is an test file, contents present in this file are not used anywhere in the project.
+"""
+Standalone Explore Mode Module for Point Cloud Roaming in Ursina.
+Enables hand gesture control for first-person walking and flying over terrain.
+"""
+
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from panda3d.core import Texture as P3DTexture
@@ -13,10 +17,8 @@ import os
 import psutil
 from covariance_align import auto_align_up_axis
 
-# ==========================================
-# 1. FILE LOADING
-# ==========================================
-csv_path = "pointcloud_sample.csv" # default fallback
+# File Loading
+csv_path = "pointcloud_sample.csv"
 if len(sys.argv) > 1:
     csv_path = sys.argv[1]
 
@@ -24,11 +26,14 @@ if not os.path.exists(csv_path):
     print(f"ERROR: Model file not found: {csv_path}")
     sys.exit(1)
 
-# ==========================================
-# 2. THREADED HAND TRACKER WITH VIDEO
-# ==========================================
+
 class HandTracker:
+    """
+    Threaded MediaPipe hand gesture tracker for standalone explore mode.
+    """
+
     def __init__(self):
+        """Initializes MediaPipe Hands and starts background video processing thread."""
         self.mp_hands = mp.solutions.hands
         self.mp_drawing = mp.solutions.drawing_utils
         self.hands = self.mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7)
@@ -52,7 +57,8 @@ class HandTracker:
         self.thread = threading.Thread(target=self._update_frames, daemon=True)
         self.thread.start()
 
-    def _update_frames(self):
+    def _update_frames(self) -> None:
+        """Continuously processes webcam frames and detects left/right hand gestures."""
         while self.running:
             success, img = self.cap.read()
             if not success:
@@ -75,7 +81,6 @@ class HandTracker:
                     st['x'] = hand_lms.landmark[0].x
                     st['y'] = hand_lms.landmark[0].y
                     
-                    # Logic for fingers
                     ring_up    = hand_lms.landmark[16].y < hand_lms.landmark[14].y
                     index_up   = hand_lms.landmark[8].y < hand_lms.landmark[6].y
                     middle_up  = hand_lms.landmark[12].y < hand_lms.landmark[10].y
@@ -121,23 +126,21 @@ class HandTracker:
             self.latest_frame = cv2.resize(img_rgb, (320, 240))
             time.sleep(0.01)
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stops background video capture."""
         self.running = False
         self.cap.release()
 
-# ==========================================
-# 3. URSINA SETUP & UI
-# ==========================================
+
+# Ursina Engine & UI Setup
 app = Ursina()
 window.color = color.color(0, 0, 0.08)
 tracker = HandTracker()
 
-# --- Performance UI ---
 fps_text = Text("FPS: --", position=(0.68, 0.46), scale=0.85, color=color.lime)
 cpu_text = Text("CPU: --", position=(0.68, 0.41), scale=0.85, color=color.orange)
 ram_text = Text("RAM: --", position=(0.68, 0.36), scale=0.85, color=color.cyan)
 
-# --- Webcam UI ---
 FEED_W, FEED_H = 320, 240
 _p3d_tex = P3DTexture('camera_feed')
 _p3d_tex.setup2dTexture(FEED_W, FEED_H, P3DTexture.TUnsignedByte, P3DTexture.FRgb)
@@ -149,7 +152,6 @@ camera_feed_view = Entity(parent=camera.ui, model='quad', scale=(0.44, 0.31), po
 camera_feed_view.model.setTexture(_p3d_tex)
 Text("LIVE", position=(-0.67, -0.168), scale=0.9, color=color.red)
 
-# --- Explration UI ---
 legend = Text(
     text=
     "<yellow>HAND CONTROLS\n\n"
@@ -181,12 +183,10 @@ right_status = Text(text="Right: Not Detected", position=(0.3, -0.35), scale=1.2
 left_status = Text(text="Left: Not Detected", position=(0.3, -0.40), scale=1.2, color=color.cyan)
 flight_status = Text(text="Mode: Grounded", position=(0.3, -0.45), scale=1.2, color=color.green)
 
-# ==========================================
-# 4. POINT CLOUD & WORLD SETUP
-# ==========================================
+# Point Cloud Environment
 print("Loading Point Cloud Environment...")
 df = pd.read_csv(csv_path)
-df = df.iloc[::6] # Less aggressive downsampling for roaming
+df = df.iloc[::6]
 df = auto_align_up_axis(df)
 
 points_xz = np.array([df["x"], df["z"]]).T
@@ -197,7 +197,7 @@ min_z, max_z = np.min(points_xz[:, 1]) + 1.0, np.max(points_xz[:, 1]) - 1.0
 
 vertices = [Vec3(x, y, z) for x, y, z in zip(df["x"], df["y"], df["z"])]
 point_colors = [(r / 255.0, g / 255.0, b / 255.0, 1.0) for r, g, b in zip(df["r"], df["g"], df["b"])]
-mesh = Mesh(vertices=vertices, colors=point_colors, mode='point', thickness=4) # Adjusted thickness for visibility
+mesh = Mesh(vertices=vertices, colors=point_colors, mode='point', thickness=4)
 Entity(model=mesh)
 
 player = FirstPersonController()
@@ -212,7 +212,9 @@ spawn_initialized = False
 is_flying = False
 flight_toggle_cooldown = 4 
 
-def reset_player():
+
+def reset_player() -> None:
+    """Resets the player controller to initial spawn position and orientation."""
     if spawn_initialized:
         player.position = spawn_position
         player.rotation_x = spawn_rotation.x
@@ -221,17 +223,17 @@ def reset_player():
         player.prev_x = player.x
         player.prev_z = player.z
 
-def update():
+
+def update() -> None:
+    """Main frame update loop for performance metrics, camera feed, and gesture navigation."""
     global is_flying, flight_toggle_cooldown
     global spawn_position, spawn_rotation, spawn_initialized
 
-    # --- UPDATE PERFORMANCE COUNTERS ---
     fps = int(1 / time.dt) if time.dt > 0 else 0
     fps_text.text = f"FPS: {fps}"
     cpu_text.text = f"CPU: {psutil.cpu_percent(interval=None):.0f}%"
     ram_text.text = f"RAM: {psutil.virtual_memory().percent:.0f}%"
     
-    # --- UPDATE WEBCAM FEED ---
     if tracker.latest_frame is not None:
         small = np.flipud(tracker.latest_frame)
         small = np.ascontiguousarray(small, dtype=np.uint8)
@@ -239,14 +241,12 @@ def update():
         memoryview(buf).cast('B')[:] = small.tobytes()
         _p3d_tex.setRamImage(buf)
 
-    # --- UPDATE UI ---
     left = tracker.state['Left']
     right = tracker.state['Right']
     
     left_status.text = f"Left: {left['gesture']}" if left['visible'] else "Left: Not Detected"
     right_status.text = f"Right: {right['gesture']}" if right['visible'] else "Right: Not Detected"
 
-    # --- RIGHT HAND: STEERING ---
     if right['visible'] and right['gesture'] == 'Steering':
         if right['x'] < 0.4: player.rotation_y -= 80 * time.dt * (0.4 - right['x'])
         elif right['x'] > 0.6: player.rotation_y += 80 * time.dt * (right['x'] - 0.6)
@@ -254,7 +254,6 @@ def update():
         if right['y'] < 0.4: player.rotation_x -= 60 * time.dt * (0.4 - right['y'])
         elif right['y'] > 0.6: player.rotation_x += 60 * time.dt * (right['y'] - 0.6)
 
-    # --- LEFT HAND: ACTIONS ---
     if left['visible']:
         if left['gesture'] == 'Toggle Flight' and time.time() > flight_toggle_cooldown:
             is_flying = not is_flying
@@ -271,7 +270,6 @@ def update():
             elif left['gesture'] == 'Forward':
                 player.position += player.forward * 2.0 * time.dt
 
-    # --- TERRAIN TRACKING & BOUNDARIES ---
     px, pz = player.x, player.z
     dists_sq = (points_xz[:, 0] - px)**2 + (points_xz[:, 1] - pz)**2
 
@@ -318,13 +316,22 @@ def update():
     else:
         player.prev_x = player.x
         player.prev_z = player.z
-        
-def input(key):
+
+
+def input(key: str) -> None:
+    """
+    Handles key events for quitting or resetting position.
+
+    Args:
+        key (str): Keyboard key string.
+    """
     if key == 'escape' or key == 'q':
         mouse.locked = False
         application.quit()
     elif key == 'r':
         reset_player()
 
-app.run()
-tracker.stop()
+
+if __name__ == "__main__":
+    app.run()
+    tracker.stop()

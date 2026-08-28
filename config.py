@@ -42,8 +42,13 @@ MODELS_COMPRESSED_DIR = os.path.join(PROJECT_ROOT, "models_compressed")
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # Validation
-def validate_config():
-    """Validate configuration values."""
+def validate_config() -> list:
+    """
+    Validates loaded configuration values against allowed ranges and constraints.
+
+    Returns:
+        list: List of string error messages describing configuration validation failures.
+    """
     errors = []
     
     if CAMERA_INDEX < 0:

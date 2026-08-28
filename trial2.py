@@ -1,3 +1,8 @@
+"""
+Interactive 3D Model & Point Cloud Viewer for Hand-AR Project.
+Supports Inspect Mode (object rotation/zoom/translation via gestures) and Explore Mode (first-person point cloud navigation).
+"""
+
 import pandas as pd
 from covariance_align import auto_align_up_axis
 from ursina import *
@@ -14,14 +19,13 @@ import sys
 import time
 import psutil
 
-
+# Arguments Parsing
 selected_model = None
-viewer_mode = "inspect" # Default mode if none is passed
+viewer_mode = "inspect"
 
 if len(sys.argv) > 1:
     selected_model = sys.argv[1]
-    
-# Check if Tkinter passed the mode argument
+
 if len(sys.argv) > 2:
     viewer_mode = sys.argv[2]
 
@@ -41,10 +45,7 @@ app = Ursina()
 window.color = color.color(0, 0, 0.08)
 os.makedirs("screenshots", exist_ok=True)
 
-
-# =====================================================================
-# -------------------- CONDITIONAL SCENE & UI SETUP -------------------
-# =====================================================================
+# Conditional Scene Setup
 if viewer_mode == "inspect":
     print("--- SETUP: INSPECT MODE ---")
     car = Entity()
@@ -59,19 +60,21 @@ if viewer_mode == "inspect":
     else:
         panda_path = Filename.from_os_specific(model_path)
         loaded = base.loader.load_model(panda_path) 
-        if loaded is None: sys.exit(1)
+        if loaded is None:
+            sys.exit(1)
         loaded.reparent_to(car)
         
     car.scale = 1
     try:
         min_b, max_b = car.model.get_tight_bounds()
-    except:
+    except Exception:
         min_b, max_b = car.get_tight_bounds()
     center = (min_b + max_b) / 2
     car.origin = center
     car.position = Vec3(0, 0, 0)
     size = max(max_b.x - min_b.x, max_b.y - min_b.y, max_b.z - min_b.z)
-    if size > 0: car.scale = 3 / size
+    if size > 0:
+        car.scale = 3 / size
     
     camera.position = Vec3(0, 0, -12)
     camera.look_at(car.position)
@@ -80,13 +83,20 @@ if viewer_mode == "inspect":
     camera_locked = False
     view_mode = "free"
 
-    def toggle_model_lock():
+    def toggle_model_lock() -> None:
+        """Toggles lock state preventing gesture-based rotation and translation of model."""
         global model_locked
         model_locked = not model_locked
         model_btn.text  = f"Model Lock: {'ON' if model_locked else 'OFF'}"
         model_btn.color = color.color(0, 0, 0.30) if model_locked else color.color(0, 0, 0.20)
 
-    def set_view(mode):
+    def set_view(mode: str) -> None:
+        """
+        Sets predefined camera position preset (front, side, top, iso).
+
+        Args:
+            mode (str): View mode name.
+        """
         global view_mode, camera_locked
         view_mode = mode
         camera_locked = True
@@ -117,7 +127,6 @@ if viewer_mode == "inspect":
     Text("RIGHT HAND\n  Index finger  ->  Rotate\n  Pinch closer  ->  Zoom in\n  Pinch apart   ->  Zoom out\n  Peace sign    ->  Screenshot\n\nLEFT HAND\n  Open palm     ->  Pause\n  Wrist move    ->  Translate", parent=camera.ui, position=(-0.785, 0.095), scale=0.72, color=color.color(0, 0, 0.75))
     gesture_text = Text("Gesture: None", parent=camera.ui, position=(0, 0.46), origin=(0, 0), scale=1.1, color=color.white)
     
-    # Disable Explore globals so the rest of the script doesn't crash
     player = None
 
 
@@ -135,7 +144,7 @@ elif viewer_mode == "explore":
 
     vertices = [Vec3(x, y, z) for x, y, z in zip(df["x"], df["y"], df["z"])]
     point_colors = [(r / 255.0, g / 255.0, b / 255.0, 1.0) for r, g, b in zip(df["r"], df["g"], df["b"])]
-    mesh = Mesh(vertices=vertices, colors=point_colors, mode='point', thickness=0.009) # Made thicker for visibility!
+    mesh = Mesh(vertices=vertices, colors=point_colors, mode='point', thickness=0.009)
     Entity(model=mesh)
 
     player = FirstPersonController()
@@ -156,12 +165,11 @@ elif viewer_mode == "explore":
     left_status = Text(text="Left: Not Detected", position=(0.3, -0.40), scale=1.2, color=color.cyan)
     flight_status = Text(text="Mode: Grounded", position=(0.3, -0.45), scale=1.2, color=color.green)
 
-    # Disable Inspect globals so the rest of the script doesn't crash
     car = None
     gesture_text = None
     rot_slider = trans_slider = zoom_slider = None
 
-# --- SHARED PERFORMANCE UI ---
+# Shared Performance & Camera Feed UI
 fps_text = Text("FPS: --", parent=camera.ui, position=(0.68, 0.46), origin=(0, 0), scale=0.85, color=color.lime)
 cpu_text = Text("CPU: --", parent=camera.ui, position=(0.68, 0.41), origin=(0, 0), scale=0.85, color=color.orange)
 ram_text = Text("RAM: --", parent=camera.ui, position=(0.68, 0.36), origin=(0, 0), scale=0.85, color=color.cyan)
@@ -174,13 +182,21 @@ _p3d_tex.setMinfilter(P3DTexture.FTLinear)
 buf = _p3d_tex.modifyRamImage()
 memoryview(buf).cast('B')[:] = b'\x00' * (FEED_W * FEED_H * 3)
 
-def _upload_frame(rgb_frame):
+
+def _upload_frame(rgb_frame: np.ndarray) -> None:
+    """
+    Resizes and updates the webcam feed texture displayed in the UI overlay.
+
+    Args:
+        rgb_frame (np.ndarray): The latest RGB video frame.
+    """
     small = cv2.resize(rgb_frame, (FEED_W, FEED_H), interpolation=cv2.INTER_LINEAR)
     small = np.flipud(small)
     small = np.ascontiguousarray(small, dtype=np.uint8)
     buf   = _p3d_tex.modifyRamImage()
     memoryview(buf).cast('B')[:] = small.tobytes()
     _p3d_tex.setRamImage(buf)
+
 
 Entity(parent=camera.ui, model='quad', scale=(0.445, 0.315), position=(-0.67, -0.335), color=color.color(0, 0, 0.35), origin=(0, 0), z=0.01)
 camera_feed_view = Entity(parent=camera.ui, model='quad', scale=(0.44, 0.31), position=(-0.67, -0.335), origin=(0, 0))
@@ -189,9 +205,7 @@ Text("LIVE", parent=camera.ui, position=(-0.67, -0.168), origin=(0, 0), scale=0.
 
 screenshot_text = Text("Screenshot Saved!", parent=camera.ui, position=(0, 0.35), origin=(0, 0), scale=1.2, color=color.cyan, enabled=False)
 
-# =====================================================================
-# -------------------- MODE-SPECIFIC INITIALIZATION -------------------
-# =====================================================================
+# Initialization Scanning Overlay Setup
 INIT_HOLD_FRAMES  = 45
 LOST_GRACE_FRAMES = 10
 init_state       = "waiting"
@@ -205,15 +219,30 @@ init_sub_text = Text("Hold still while scanning...", parent=camera.ui, position=
 init_bar_bg = Entity(parent=camera.ui, model='quad', scale=(0.42, 0.018), position=(0, -0.06), color=color.color(0, 0, 0.25), origin=(0, 0), z=0.02, enabled=True)
 init_bar_fill = Entity(parent=camera.ui, model='quad', scale=(0.0, 0.014), position=(-0.21, -0.06), color=color.cyan, origin=(-0.5, 0), z=0.01, enabled=True)
 
-def _set_init_overlay(enabled: bool):
+
+def _set_init_overlay(enabled: bool) -> None:
+    """
+    Enables or disables visibility of the hand scanner initialization UI overlay.
+
+    Args:
+        enabled (bool): True to show overlay, False to hide.
+    """
     init_panel.enabled       = enabled
     init_status_text.enabled = enabled
     init_sub_text.enabled    = enabled
     init_bar_bg.enabled      = enabled
     init_bar_fill.enabled    = enabled
 
-def _update_init_bar(fraction: float):
+
+def _update_init_bar(fraction: float) -> None:
+    """
+    Updates progress bar fill scale during initial hand scanning hold.
+
+    Args:
+        fraction (float): Progress ratio between 0.0 and 1.0.
+    """
     init_bar_fill.scale_x = 0.42 * max(0.0, min(1.0, fraction))
+
 
 mp_hands   = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
@@ -223,8 +252,18 @@ RIGHT_STYLE = mp_drawing.DrawingSpec(color=(50,  180, 255), thickness=2, circle_
 LEFT_CONN   = mp_drawing.DrawingSpec(color=(0,   180,   0), thickness=2)
 RIGHT_CONN  = mp_drawing.DrawingSpec(color=(0,   130, 230), thickness=2)
 
-def _draw_skeletons(display_frame, res, registered_hands=None):
-    if not (res and res.multi_hand_landmarks and res.multi_handedness): return
+
+def _draw_skeletons(display_frame: np.ndarray, res, registered_hands: dict = None) -> None:
+    """
+    Renders MediaPipe hand skeleton landmarks and connection lines onto a frame.
+
+    Args:
+        display_frame (np.ndarray): Video frame to draw on.
+        res: MediaPipe hands detection results object.
+        registered_hands (dict): Dict of actively registered hand labels.
+    """
+    if not (res and res.multi_hand_landmarks and res.multi_handedness):
+        return
     h_px, w_px, _ = display_frame.shape
     for i, hand_lms in enumerate(res.multi_hand_landmarks):
         label = res.multi_handedness[i].classification[0].label
@@ -240,39 +279,49 @@ def _draw_skeletons(display_frame, res, registered_hands=None):
         cv2.putText(display_frame, tag_label, (wx - 20, wy + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, tag_col, 2)
         mp_drawing.draw_landmarks(display_frame, hand_lms, mp_hands.HAND_CONNECTIONS, landmark_drawing_spec=ns, connection_drawing_spec=cs)
 
-def _full_motion_reset():
+
+def _full_motion_reset() -> None:
+    """Resets all smoothed motion accumulators, tracking deltas, and pause state."""
     global last_rx, last_ry, last_lx, last_ly, last_zoom, smooth_rx, smooth_ry, smooth_tx, smooth_ty, smooth_zoom, paused, PAUSE_FRAMES, UNPAUSE_FRAMES
     last_rx = last_ry = last_lx = last_ly = last_zoom = None
     smooth_rx = smooth_ry = smooth_tx = smooth_ty = smooth_zoom = 0.0
     paused = False; PAUSE_FRAMES = 0; UNPAUSE_FRAMES = 0
 
-def _reset_init():
+
+def _reset_init() -> None:
+    """Resets hand registration scanning state machine when tracking is lost."""
     global init_state, init_frames, lost_frames, registered_hands
     init_state = "waiting"; init_frames = lost_frames = 0; registered_hands = {}
-    if viewer_mode == "inspect": _full_motion_reset()
+    if viewer_mode == "inspect":
+        _full_motion_reset()
     _update_init_bar(0); _set_init_overlay(True)
     init_status_text.text = "Show your hand(s) to begin"
     init_status_text.color = color.yellow
     init_sub_text.text = "Hold still while scanning..."
 
 
-# =====================================================================
-# -------------------- MODE-SPECIFIC SETUP ----------------------------
-# =====================================================================
+# Mode-Specific Tracking Setup
 if viewer_mode == "inspect":
     hands_det  = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.8, min_tracking_confidence=0.8)
     cap = cv2.VideoCapture(0)
     
-    def is_open_palm_relaxed(hand):
+    def is_open_palm_relaxed(hand) -> bool:
+        """Checks if hand landmarks match a relaxed open palm gesture."""
         lm = hand.landmark
         tips, bases = [8, 12, 16], [5, 9, 13]
         return sum(lm[t].y < lm[b].y - 0.01 for t, b in zip(tips, bases)) >= 2
-    def is_peace(hand):
+
+    def is_peace(hand) -> bool:
+        """Checks if hand landmarks match a peace sign gesture."""
         lm = hand.landmark
-        return (lm[8].y  < lm[6].y and lm[12].y < lm[10].y and lm[16].y > lm[14].y)
-    def pinch_distance(hand):
+        return (lm[8].y < lm[6].y and lm[12].y < lm[10].y and lm[16].y > lm[14].y)
+
+    def pinch_distance(hand) -> float:
+        """Calculates distance between index tip and thumb tip."""
         return math.dist((hand.landmark[4].x, hand.landmark[4].y), (hand.landmark[8].x, hand.landmark[8].y))
-    def is_pinch(hand):
+
+    def is_pinch(hand) -> bool:
+        """Returns True if index and thumb tips are pinched close together."""
         return pinch_distance(hand) < 0.05
 
     smooth_rx = smooth_ry = smooth_tx = smooth_ty = smooth_zoom = 0.0
@@ -283,8 +332,12 @@ if viewer_mode == "inspect":
 
 elif viewer_mode == "explore":
     import threading
+
     class HandTracker:
+        """Threaded MediaPipe hand tracker for explore mode."""
+
         def __init__(self):
+            """Starts camera capture and background frame processing thread."""
             self.hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.7)
             self.cap = cv2.VideoCapture(0)
             self.state = {
@@ -296,11 +349,13 @@ elif viewer_mode == "explore":
             self.thread = threading.Thread(target=self._update_frames, daemon=True)
             self.thread.start()
 
-        def _update_frames(self):
+        def _update_frames(self) -> None:
+            """Continuously captures camera frames, evaluates gestures, and updates state."""
             global registered_hands, init_state
             while self.running:
                 success, img = self.cap.read()
-                if not success: continue
+                if not success:
+                    continue
                 img = cv2.flip(img, 1)
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 results = self.hands.process(img_rgb)
@@ -359,10 +414,8 @@ elif viewer_mode == "explore":
                             elif st['fist']: st['gesture'] = 'Stop'
                             else: st['gesture'] = 'None'
                 
-                # --- SHARED CUSTOM SKELETONS ---
                 _draw_skeletons(img_rgb, results, registered_hands)
                 
-                # Only show gesture text if the hands have been fully registered!
                 if init_state == "locked":
                     cv2.putText(img_rgb, f"LEFT : {self.state['Left']['gesture']}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
                     cv2.putText(img_rgb, f"RIGHT: {self.state['Right']['gesture']}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
@@ -370,13 +423,16 @@ elif viewer_mode == "explore":
                 self.latest_frame = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
                 time.sleep(0.01)
 
-        def stop(self):
+        def stop(self) -> None:
+            """Stops frame updates and releases video capture object."""
             self.running = False
             self.cap.release()
 
     tracker = HandTracker()
 
-def reset_player():
+
+def reset_player() -> None:
+    """Resets first-person player position and rotation in Explore Mode to spawn point."""
     if viewer_mode == "explore" and spawn_initialized:
         player.position = spawn_position
         player.rotation_x = spawn_rotation.x
@@ -386,9 +442,7 @@ def reset_player():
         player.prev_z = player.z
 
 
-# =====================================================================
-# -------------------------  CONSTANTS -------------------------
-# =====================================================================
+# Motion Constants
 ALPHA_ROT   = 0.12
 ALPHA_TRANS = 0.10
 ALPHA_ZOOM  = 0.10
@@ -401,11 +455,12 @@ MAX_ZOOM_DELTA  = 0.06
 PAUSE_ENGAGE_FRAMES  = 8   
 PAUSE_RELEASE_FRAMES = 6   
 
-# =====================================================================
-# ------------------------- MAIN UPDATE LOOP --------------------------
-# =====================================================================
 
-def update():
+def update() -> None:
+    """
+    Main frame update function called per tick by Ursina engine.
+    Processes camera input, hand gestures, object transformations, terrain collision, and UI.
+    """
     global last_rx, last_ry, last_lx, last_ly, smooth_rx, smooth_ry, smooth_tx, smooth_ty, last_zoom, smooth_zoom
     global PAUSE_FRAMES, UNPAUSE_FRAMES, paused, screenshot_cooldown, screenshot_timer
     global rot_sens, trans_sens, zoom_sens, init_state, init_frames, lost_frames, registered_hands
@@ -420,7 +475,8 @@ def update():
     if viewer_mode == "inspect":
         rot_sens = rot_slider.value; trans_sens = trans_slider.value; zoom_sens = zoom_slider.value
         ok, frame = cap.read()
-        if not ok: return
+        if not ok:
+            return
         frame = cv2.flip(frame, 1)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = hands_det.process(rgb)
@@ -466,19 +522,24 @@ def update():
         else:
             lost_frames = 0
 
-        if lost_frames > 0: gesture_text.text = f"Hand lost! Re-init in {LOST_GRACE_FRAMES - lost_frames}..."; gesture_text.color = color.red
+        if lost_frames > 0:
+            gesture_text.text = f"Hand lost! Re-init in {LOST_GRACE_FRAMES - lost_frames}..."; gesture_text.color = color.red
 
         left_is_open = left is not None and is_open_palm_relaxed(left)
         if not paused:
-            if left_is_open: PAUSE_FRAMES += 1; UNPAUSE_FRAMES = 0
-            else: PAUSE_FRAMES = 0
+            if left_is_open:
+                PAUSE_FRAMES += 1; UNPAUSE_FRAMES = 0
+            else:
+                PAUSE_FRAMES = 0
             if PAUSE_FRAMES >= PAUSE_ENGAGE_FRAMES:
                 paused = True; UNPAUSE_FRAMES = 0
                 last_rx = last_ry = last_lx = last_ly = last_zoom = None
                 smooth_rx = smooth_ry = smooth_tx = smooth_ty = smooth_zoom = 0.0
         else:
-            if not left_is_open: UNPAUSE_FRAMES += 1; PAUSE_FRAMES = 0
-            else: UNPAUSE_FRAMES = 0
+            if not left_is_open:
+                UNPAUSE_FRAMES += 1; PAUSE_FRAMES = 0
+            else:
+                UNPAUSE_FRAMES = 0
             if UNPAUSE_FRAMES >= PAUSE_RELEASE_FRAMES:
                 paused = False; PAUSE_FRAMES = UNPAUSE_FRAMES = 0
                 last_rx = last_ry = last_lx = last_ly = last_zoom = None
@@ -500,7 +561,8 @@ def update():
                     smooth_rx = smooth_rx * (1 - ALPHA_ROT) + (dy * rot_sens) * ALPHA_ROT
                     smooth_ry = smooth_ry * (1 - ALPHA_ROT) + (-dx * rot_sens) * ALPHA_ROT
                     car.rotation_x += smooth_rx; car.rotation_y += smooth_ry
-                else: smooth_rx = smooth_ry = 0.0
+                else:
+                    smooth_rx = smooth_ry = 0.0
                 last_rx, last_ry = ix, iy
             else:
                 smooth_rx *= ROT_DECAY; smooth_ry *= ROT_DECAY; last_rx = last_ry = None
@@ -510,11 +572,13 @@ def update():
                 pd_dist = pinch_distance(right)
                 if last_zoom is not None:
                     delta = pd_dist - last_zoom
-                    if abs(delta) < 0.003: delta = 0.0
+                    if abs(delta) < 0.003:
+                        delta = 0.0
                     delta = max(-MAX_ZOOM_DELTA, min(MAX_ZOOM_DELTA, delta))
                     smooth_zoom = smooth_zoom * (1 - ALPHA_ZOOM) + (delta * zoom_sens * 2) * ALPHA_ZOOM
                     camera.z = clamp(camera.z - smooth_zoom, -35, -3)
-                else: smooth_zoom = 0.0
+                else:
+                    smooth_zoom = 0.0
                 last_zoom = pd_dist
             else:
                 smooth_zoom *= ZOOM_DECAY; last_zoom = None
@@ -528,12 +592,14 @@ def update():
                     smooth_tx = smooth_tx * (1 - ALPHA_TRANS) + dx * trans_sens * ALPHA_TRANS
                     smooth_ty = smooth_ty * (1 - ALPHA_TRANS) + dy * trans_sens * ALPHA_TRANS
                     car.position += Vec3(smooth_tx, smooth_ty, 0)
-                else: smooth_tx = smooth_ty = 0.0
+                else:
+                    smooth_tx = smooth_ty = 0.0
                 last_lx, last_ly = lx, ly
             else:
                 smooth_tx *= TRANS_DECAY; smooth_ty *= TRANS_DECAY; last_lx = last_ly = None
 
-        if lost_frames == 0: gesture_text.text = f"Gesture: {current_gest}"; gesture_text.color = color.red if paused else color.white
+        if lost_frames == 0:
+            gesture_text.text = f"Gesture: {current_gest}"; gesture_text.color = color.red if paused else color.white
         _draw_skeletons(display_frame, res, registered_hands)
         if paused:
             cv2.rectangle(display_frame, (0, h_px // 2 - 20), (w_px, h_px // 2 + 20), (18, 18, 28), -1)
@@ -550,7 +616,6 @@ def update():
 
         left, right = tracker.state['Left'], tracker.state['Right']
         
-        # --- EXPLORE MODE INITIALIZATION CHECK ---
         seen_this_frame = {}
         if left['visible']: seen_this_frame['Left'] = True
         if right['visible']: seen_this_frame['Right'] = True
@@ -572,8 +637,6 @@ def update():
                     registered_hands = {label: True for label in seen_this_frame}
                     init_state = "locked"; lost_frames = 0
                     _update_init_bar(1.0); _set_init_overlay(False)
-            
-            # Stop here so you can't fly around while scanning!
             return
 
         if not any(lbl in seen_this_frame for lbl in registered_hands):
@@ -584,7 +647,6 @@ def update():
         else:
             lost_frames = 0
 
-        # --- GESTURES AFTER LOCKED ---
         left_status.text = f"Left: {left['gesture']}" if left['visible'] else "Left: Not Detected"
         right_status.text = f"Right: {right['gesture']}" if right['visible'] else "Right: Not Detected"
 
@@ -639,14 +701,25 @@ def update():
         else:
             player.prev_x, player.prev_z = player.x, player.z
 
-def input(key):
+
+def input(key: str) -> None:
+    """
+    Handles keypress events for application exit and player reset.
+
+    Args:
+        key (str): Pressed key identifier.
+    """
     if key == 'escape' or key == 'q':
         mouse.locked = False
         application.quit()
     elif key == 'r':
         reset_player()
 
-app.run()
-if viewer_mode == "inspect": cap.release()
-else: tracker.stop()
-cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    app.run()
+    if viewer_mode == "inspect":
+        cap.release()
+    else:
+        tracker.stop()
+    cv2.destroyAllWindows()

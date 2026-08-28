@@ -1,23 +1,43 @@
+"""
+GLB Scanner Module for Hand-AR Project.
+Handles searching for local 3D models/point clouds and fetching/downloading downloadable models from Sketchfab API.
+"""
+
 import os
 import requests
 import json
 import time
 from dotenv import load_dotenv
+
 load_dotenv()
 
-INDEX_FILE="database.json"
+INDEX_FILE = "database.json"
 SKETCHFAB_TOKEN = os.getenv("SKETCHFAB_TOKEN")
 
 if not SKETCHFAB_TOKEN:
-    raise ValueError(" NO SKETCHFAB_TOKEN found in .env please get an api key to download models")
+    raise ValueError("NO SKETCHFAB_TOKEN found in .env. Please provide an API key to download models.")
 
-def save_index(data):
+
+def save_index(data: dict) -> None:
+    """
+    Atomically saves search index data to database.json.
+
+    Args:
+        data (dict): Dictionary containing query results and metadata to persist.
+    """
     temp_file = INDEX_FILE + ".tmp"
     with open(temp_file, "w") as f:
         json.dump(data, f, indent=2)
-    os.replace(temp_file, INDEX_FILE)  # atomic replace
+    os.replace(temp_file, INDEX_FILE)
 
-def load_index():
+
+def load_index() -> dict:
+    """
+    Loads the search database index from database.json.
+
+    Returns:
+        dict: The cached database content, or empty dict if non-existent/corrupted.
+    """
     if not os.path.exists(INDEX_FILE):
         return {}
 
@@ -28,34 +48,26 @@ def load_index():
         print("Corrupted or empty database. Resetting...")
         return {}
 
-# def scan_local(root_folder):
-#     glb_files = []
 
-#     for root, dirs, files in os.walk(root_folder):
-#         for file in files:
-#             if file.lower().endswith(".glb"):
-#                 full_path = os.path.join(root, file)
-#                 glb_files.append({
-#                     "name": file,
-#                     "path": full_path,
-#                     "source": "local"
-#                 })
+def scan_local(root_folder: str) -> list:
+    """
+    Scans local directory for 3D model files (.glb, .obj, .csv) and assigns view modes.
 
-#     return glb_files
+    Args:
+        root_folder (str): Directory path containing local 3D assets.
 
-def scan_local(root_folder):
+    Returns:
+        list: List of dictionaries describing each local model file and its mode.
+    """
     glb_files = []
     existing_modes = {}
     
-    # 1. Look for database.json in the main project folder (one level up from /models)
     project_dir = os.path.dirname(root_folder)
     db_path = os.path.join(project_dir, "database.json")
     
-    # Fallback just in case it actually is inside the models folder
     if not os.path.exists(db_path):
         db_path = os.path.join(root_folder, "database.json")
 
-    # 2. Memorize your manual tags
     if os.path.exists(db_path):
         try:
             with open(db_path, "r") as f:
@@ -66,16 +78,11 @@ def scan_local(root_folder):
         except Exception as e:
             print(f"Could not read existing modes: {e}")
 
-    # 3. Scan the directory
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.lower().endswith((".glb", ".csv", ".obj")):
                 full_path = os.path.join(root, file)
-                
-                # Smart Defaults: CSVs default to explore, 3D models default to inspect.
                 default_mode = "explore" if file.lower().endswith(".csv") else "inspect"
-                
-                # BUT if you manually changed it in database.json, this line forces it to keep your edit!
                 saved_mode = existing_modes.get(file, default_mode)
                 
                 glb_files.append({
@@ -87,9 +94,18 @@ def scan_local(root_folder):
 
     return glb_files
 
-def search_web(query="car"):
-    results = []
 
+def search_web(query: str = "car") -> list:
+    """
+    Searches the Sketchfab API v3 for downloadable 3D models matching a query.
+
+    Args:
+        query (str): Search term for Sketchfab models. Defaults to "car".
+
+    Returns:
+        list: List of downloadable web model records containing name, UID, and viewer URL.
+    """
+    results = []
     url = "https://api.sketchfab.com/v3/search"
     params = {
         "q": query,
@@ -116,20 +132,19 @@ def search_web(query="car"):
         print("Web search failed:", e)
     return results
 
-def search_index(query):
-    database = load_index()
 
-    if not database:
-        return []
+def unified_search(folder: str, query: str = "car", use_cache: bool = True) -> list:
+    """
+    Combines local model files and online Sketchfab models into a unified search result.
 
-    results = []
-    for item in database.get("results", []):
-        if query.lower() in item["name"].lower():
-            results.append(item)
+    Args:
+        folder (str): Local models directory path.
+        query (str): Search query keyword. Defaults to "car".
+        use_cache (bool): If True, returns cached results when queries match database.json.
 
-    return results
-
-def unified_search(folder, query="car", use_cache=True):
+    Returns:
+        list: Deduplicated list of local and web search result records.
+    """
     database = load_index()
 
     if use_cache and database:
@@ -155,10 +170,20 @@ def unified_search(folder, query="car", use_cache=True):
     }
 
     save_index(data)
-
     return combined
 
-def download_glb(model, save_folder):
+
+def download_glb(model: dict, save_folder: str) -> str:
+    """
+    Downloads a GLB model asset from Sketchfab using the API token.
+
+    Args:
+        model (dict): Model dictionary containing source, uid, and name metadata.
+        save_folder (str): Directory path to save the downloaded model.
+
+    Returns:
+        str: Absolute file path to the saved local GLB file, or None if download fails.
+    """
     if model["source"] != "web":
         return model.get("path")
 
@@ -172,12 +197,10 @@ def download_glb(model, save_folder):
             "Authorization": f"Token {SKETCHFAB_TOKEN}"
         }
 
-        # Step 1: get download info
         url = f"https://api.sketchfab.com/v3/models/{uid}/download"
         res = requests.get(url, headers=headers)
         data = res.json()
 
-        # Step 2: get actual GLB file URL
         if "glb" in data:
             download_url = data["glb"]["url"]
         elif "zip" in data:
@@ -192,14 +215,13 @@ def download_glb(model, save_folder):
         print(f"Downloading {name}...")
 
         r = requests.get(download_url, stream=True)
-        r.raise_for_status()  # catch HTTP errors early, prevents silent crash
+        r.raise_for_status()
         with open(save_path, "wb") as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
         print(f"Saved to {save_path}")
 
-        # Update database.json: mark this model as local 
         database = load_index()
         updated = False
         for item in database.get("results", []):

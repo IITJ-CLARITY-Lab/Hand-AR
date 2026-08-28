@@ -1,3 +1,8 @@
+"""
+Opening GUI Module for Hand-AR Project.
+Provides a futuristic Tkinter interface for browsing, downloading, and launching 3D model interaction modes.
+"""
+
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
@@ -5,26 +10,25 @@ import os
 import sys
 import math
 import time
-from glb_scanner import unified_search,download_glb
+from glb_scanner import unified_search, download_glb
 
+# UI Color Palette
+BG         = "#080c10"
+BG2        = "#0d1520"
+PANEL      = "#0f1923"
+PANEL2     = "#141e2b"
+ACCENT     = "#00d4ff"   
+ACCENT2    = "#0077ff"      
+ACCENT_DIM = "#003d5c"
+GREEN      = "#00ff88"
+ORANGE     = "#ff6b35"
+TEXT       = "#e8f4fd"
+TEXT_DIM   = "#4a7a99"
+TEXT_MUTE  = "#243447"
+BORDER     = "#1a2d3d"
+BORDER_HI  = "#00d4ff"
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG        = "#080c10"
-BG2       = "#0d1520"
-PANEL     = "#0f1923"
-PANEL2    = "#141e2b"
-ACCENT    = "#00d4ff"   
-ACCENT2   = "#0077ff"      
-ACCENT_DIM= "#003d5c"
-GREEN     = "#00ff88"
-ORANGE    = "#ff6b35"
-TEXT      = "#e8f4fd"
-TEXT_DIM  = "#4a7a99"
-TEXT_MUTE = "#243447"
-BORDER    = "#1a2d3d"
-BORDER_HI = "#00d4ff"
-
-#  Fonts
+# UI Fonts
 FONT_TITLE  = ("Courier New", 26, "bold")
 FONT_SUB    = ("Courier New", 10, "normal")
 FONT_LABEL  = ("Courier New", 9,  "normal")
@@ -35,49 +39,87 @@ FONT_HDR    = ("Courier New", 12, "bold")
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR  = os.path.join(PROJECT_DIR, "models")
-LOCAL_MODELS_DIR=MODELS_DIR
+LOCAL_MODELS_DIR = MODELS_DIR
 
 
-# ---------
-#  Helpers
-# ---------
+def _btn_hover(btn: tk.Button, normal_bg: str, hover_bg: str, normal_fg: str = TEXT, hover_fg: str = BG) -> None:
+    """
+    Binds mouse hover events to smooth button background/foreground color transitions.
 
-def _btn_hover(btn, normal_bg, hover_bg, normal_fg=TEXT, hover_fg=BG):
+    Args:
+        btn (tk.Button): The target Tkinter button.
+        normal_bg (str): Normal background color hex.
+        hover_bg (str): Hover background color hex.
+        normal_fg (str): Normal text color hex.
+        hover_fg (str): Hover text color hex.
+    """
     btn.bind("<Enter>", lambda e: btn.config(bg=hover_bg, fg=hover_fg))
     btn.bind("<Leave>", lambda e: btn.config(bg=normal_bg, fg=normal_fg))
 
 
-def _make_toplevel(parent, title, w, h):
+def _make_toplevel(parent: tk.Widget, title: str, w: int, h: int) -> tk.Toplevel:
+    """
+    Creates and configures a styled top-level modal window.
+
+    Args:
+        parent (tk.Widget): Parent Tkinter window.
+        title (str): Window title.
+        w (int): Window width in pixels.
+        h (int): Window height in pixels.
+
+    Returns:
+        tk.Toplevel: Configured modal dialog instance.
+    """
     win = tk.Toplevel(parent)
     win.title(title)
     win.geometry(f"{w}x{h}")
     win.configure(bg=BG)
     win.resizable(False, False)
     win.grab_set()
-    # Thin accent top border
     tk.Frame(win, bg=ACCENT, height=2).pack(fill="x")
     return win
 
 
-def _corner_tag(canvas, x, y, size=10, color=ACCENT_DIM):
-    """Draw a corner bracket at (x,y). Used for technical framing."""
+def _corner_tag(canvas: tk.Canvas, x: int, y: int, size: int = 10, color: str = ACCENT_DIM) -> None:
+    """
+    Draws a technical corner bracket overlay on a canvas.
+
+    Args:
+        canvas (tk.Canvas): Target Tkinter canvas object.
+        x (int): X coordinate of corner.
+        y (int): Y coordinate of corner.
+        size (int): Size of bracket arms in pixels.
+        color (str): Hex color for bracket lines.
+    """
     canvas.create_line(x, y + size, x, y, x + size, y, fill=color, width=1)
 
 
-def _draw_grid(canvas, w, h, step=28, color="#0a1520"):
+def _draw_grid(canvas: tk.Canvas, w: int, h: int, step: int = 28, color: str = "#0a1520") -> None:
+    """
+    Draws a subtle background grid pattern on a canvas.
+
+    Args:
+        canvas (tk.Canvas): Target Tkinter canvas object.
+        w (int): Canvas width.
+        h (int): Canvas height.
+        step (int): Grid line spacing in pixels.
+        color (str): Hex color for grid lines.
+    """
     for x in range(0, w, step):
         canvas.create_line(x, 0, x, h, fill=color, width=1)
     for y in range(0, h, step):
         canvas.create_line(0, y, w, y, fill=color, width=1)
 
 
-
-#ANIMATED CANVAS BAR
 class HeaderCanvas(tk.Canvas):
+    """
+    Custom animated Canvas widget displaying a dynamic sci-fi rotating graphic.
+    """
 
-    SPEED = 0.6   # rotation speed (degrees per 16 ms tick)
+    SPEED = 0.6  # Rotation speed in degrees per tick
 
     def __init__(self, parent, **kw):
+        """Initializes canvas graphics and starts animation tick loop."""
         super().__init__(parent, **kw)
         self._angle = 0.0
         self._after_id = None
@@ -85,31 +127,31 @@ class HeaderCanvas(tk.Canvas):
         self._draw()
         self._tick()
 
-    def _stop(self):
+    def _stop(self) -> None:
+        """Cancels scheduled animation timer callback."""
         if self._after_id:
             self.after_cancel(self._after_id)
             self._after_id = None
 
-    def _tick(self):
+    def _tick(self) -> None:
+        """Updates rotation angle and schedules next animation frame (~60 FPS)."""
         self._angle = (self._angle + self.SPEED) % 360
         self._draw()
         self._after_id = self.after(16, self._tick)
 
-    def _draw(self):
+    def _draw(self) -> None:
+        """Renders animated rings, spokes, dots, and corner accents on the canvas."""
         self.delete("all")
         w = int(self["width"])
         h = int(self["height"])
         cx, cy = w // 2, h // 2
 
-        # Background grid
         _draw_grid(self, w, h, step=24, color="#090f18")
 
-        # Rotating outer ring
         r_outer = 54
         r_inner = 40
         a = math.radians(self._angle)
 
-        # Dashed orbit ring
         for i in range(0, 360, 6):
             ia = math.radians(i)
             x0 = cx + r_outer * math.cos(ia)
@@ -117,20 +159,15 @@ class HeaderCanvas(tk.Canvas):
             if i % 12 == 0:
                 self.create_oval(x0-1.5, y0-1.5, x0+1.5, y0+1.5, fill=ACCENT_DIM, outline="")
 
-        # 3 rotating spoke tips
         for k in range(3):
             ak = a + math.radians(k * 120)
-            x1 = cx + r_inner * math.cos(ak)
-            y1 = cy + r_inner * math.sin(ak)
             x2 = cx + r_outer * math.cos(ak)
             y2 = cy + r_outer * math.sin(ak)
             self.create_line(cx, cy, x2, y2, fill=ACCENT_DIM, width=1)
             self.create_oval(x2-3, y2-3, x2+3, y2+3, fill=ACCENT, outline="")
-            # small crosshair at spoke tip
             self.create_line(x2-5, y2, x2+5, y2, fill=ACCENT, width=1)
             self.create_line(x2, y2-5, x2, y2+5, fill=ACCENT, width=1)
 
-        # Counter-rotating inner triangle
         for k in range(3):
             ak = -a * 1.5 + math.radians(k * 120)
             bk = -a * 1.5 + math.radians((k+1) * 120)
@@ -140,55 +177,45 @@ class HeaderCanvas(tk.Canvas):
             y2 = cy + 22 * math.sin(bk)
             self.create_line(x1, y1, x2, y2, fill=ACCENT2, width=1)
 
-        # Centre dot
         self.create_oval(cx-5, cy-5, cx+5, cy+5, fill=ACCENT, outline=BG, width=2)
         self.create_oval(cx-2, cy-2, cx+2, cy+2, fill="white", outline="")
 
-        # Corner brackets around canvas
         pad = 8
         size = 14
         for bx, by in [(pad, pad), (w-pad-size, pad),
                        (pad, h-pad-size), (w-pad-size, h-pad-size)]:
             _corner_tag(self, bx, by, size, ACCENT_DIM)
 
-        # Scanline overlay — subtle horizontal lines
         for y in range(0, h, 4):
             self.create_line(0, y, w, y, fill="#0a0f18", width=1)
 
 
-def launch_ursina(model_path: str, mode: str):
+def launch_ursina(model_path: str, mode: str) -> None:
+    """
+    Launches the Ursina 3D viewer subprocess (`trial2.py`) with selected model and mode.
+
+    Args:
+        model_path (str): File path to 3D model or CSV point cloud.
+        mode (str): Interaction mode ("inspect" or "explore").
+    """
     interaction_file = os.path.join(PROJECT_DIR, "trial2.py")
     if not os.path.exists(interaction_file):
-        messagebox.showerror("Error", "trial2_2.py not found")
+        messagebox.showerror("Error", "trial2.py not found")
         return
     
-    subprocess.Popen([sys.executable, interaction_file, model_path, mode],
-                     cwd=PROJECT_DIR)
-# debug file 
-# def launch_point_cloud(csv_path: str):
-#     interaction_file = os.path.join(PROJECT_DIR, "plotcsv.py")
-#     if not os.path.exists(interaction_file):
-#         messagebox.showerror("Error", "plotcsv.py not found")
-#         return
-#     subprocess.Popen([sys.executable, interaction_file, csv_path],
-#                      cwd=PROJECT_DIR)
-# debug
-# def launch_explore(model_path: str):
-#     interaction_file = os.path.join(PROJECT_DIR, "explore.py")
-#     if not os.path.exists(interaction_file):
-#         messagebox.showerror("Error", "explore.py not found")
-#         return
-#     subprocess.Popen([sys.executable, interaction_file, model_path],
-#                      cwd=PROJECT_DIR)
+    subprocess.Popen([sys.executable, interaction_file, model_path, mode], cwd=PROJECT_DIR)
 
-def open_model_selector():
+
+def open_model_selector() -> None:
+    """
+    Opens the model selection modal allowing search, download, and launch of 3D models.
+    """
     if not os.path.exists(MODELS_DIR):
         messagebox.showerror("Error", "models/ folder not found")
         return
 
     win = _make_toplevel(root, "Select Model", 460, 520)
 
-    #  Header 
     hdr = tk.Frame(win, bg=PANEL, pady=0)
     hdr.pack(fill="x")
     tk.Label(hdr, text="// SELECT MODEL", fg=ACCENT, bg=PANEL,
@@ -197,7 +224,6 @@ def open_model_selector():
              font=FONT_MONO).pack(side="right", padx=20)
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
 
-    # Search bar 
     search_frame = tk.Frame(win, bg=BG2, padx=16, pady=10)
     search_frame.pack(fill="x")
 
@@ -225,12 +251,10 @@ def open_model_selector():
 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
 
-    #  Status bar
     status = tk.Label(win, text="Enter a query and press SEARCH ...", fg=TEXT_DIM,
                       bg=BG2, font=FONT_MONO, anchor="w", padx=16, pady=6)
     status.pack(fill="x")
 
-    # Scrollable model list
     outer = tk.Frame(win, bg=BG, padx=16, pady=12)
     outer.pack(fill="both", expand=True)
 
@@ -249,8 +273,8 @@ def open_model_selector():
     canvas_list.bind_all("<MouseWheel>",
                          lambda e: canvas_list.yview_scroll(-1*(e.delta//120), "units"))
 
-    #helper funtions
-    def _make_hover(r, ab, ar):
+    def _make_hover(r: tk.Frame, ab: tk.Frame, ar: tk.Label) -> None:
+        """Binds hover background updates for model result rows."""
         def on_enter(e):
             r.config(bg=PANEL2); ab.config(bg=ACCENT); ar.config(fg=ACCENT, bg=PANEL2)
             for child in r.winfo_children():
@@ -277,7 +301,8 @@ def open_model_selector():
             for c2 in child.winfo_children():
                 c2.bind("<Enter>", on_enter); c2.bind("<Leave>", on_leave)
 
-    def _make_click(m, r):
+    def _make_click(m: dict, r: tk.Frame) -> None:
+        """Binds click event for downloading asset and launching viewer."""
         def on_click(e):
             search_btn.config(state="disabled")
             status.config(text=f"Downloading  {m['name']} ...", fg=ORANGE)
@@ -292,10 +317,8 @@ def open_model_selector():
                     return
                 win.destroy()
                 
-                # --- UNIFIED LAUNCHER ---
                 mode = m.get("mode", "inspect")
                 print(f"Launching {mode.upper()} Mode:", path)
-                # Pass BOTH the path and the mode to your main script
                 launch_ursina(path, mode) 
                 
             else:
@@ -306,9 +329,8 @@ def open_model_selector():
             widget.bind("<Button-1>", on_click)
         r.bind("<Button-1>", on_click)
 
-    # ── Populate list from results
-    def _populate(models):
-        # Clear previous rows
+    def _populate(models: list) -> None:
+        """Populates scrollable list with local and web model search results."""
         for widget in inner.winfo_children():
             widget.destroy()
 
@@ -318,7 +340,6 @@ def open_model_selector():
             status.config(text="0 results", fg=TEXT_DIM)
             return
 
-        # Local first, then web
         local_models = [m for m in models if m["source"] == "local"]
         web_models   = [m for m in models if m["source"] == "web"]
         ordered      = local_models + web_models
@@ -363,8 +384,8 @@ def open_model_selector():
             fg=TEXT_DIM
         )
 
-    #Search action
-    def _do_search():
+    def _do_search() -> None:
+        """Triggers model search via unified_search API."""
         query = search_var.get().strip()
         if not query:
             return
@@ -373,7 +394,6 @@ def open_model_selector():
         win.update_idletasks()
 
         try:
-            # use_cache=False so a new query always hits the web fresh
             results = unified_search(MODELS_DIR, query=query, use_cache=False)
         except Exception as ex:
             status.config(text=f"Search error: {ex}", fg=ORANGE)
@@ -384,27 +404,32 @@ def open_model_selector():
         _populate(results)
 
     search_btn.config(command=_do_search)
-    # Also trigger search on Enter key inside the entry
     search_entry.bind("<Return>", lambda e: _do_search())
-
-    # Run default search immediately on open
     win.after(50, _do_search)
 
-    # Footer 
     tk.Frame(win, bg=BORDER, height=1).pack(fill="x")
     tk.Label(win, text="Click a model to download & launch the viewer",
              fg=TEXT_DIM, bg=BG, font=FONT_MONO, pady=8).pack()
 
 
-def _all_children(widget):
+def _all_children(widget: tk.Widget) -> list:
+    """
+    Recursively collects all child widgets under a parent widget.
+
+    Args:
+        widget (tk.Widget): Parent Tkinter widget.
+
+    Returns:
+        list: Flat list of child widgets.
+    """
     children = list(widget.winfo_children())
     for child in widget.winfo_children():
         children.extend(_all_children(child))
     return children
 
-#  Controls window
 
-def show_controls():
+def show_controls() -> None:
+    """Opens modal window presenting hand gesture controls reference cheat sheet."""
     win = _make_toplevel(root, "Gesture Controls", 420, 400)
 
     tk.Label(win, text="// GESTURE CONTROLS", fg=ACCENT, bg=BG,
@@ -428,7 +453,6 @@ def show_controls():
     ]
 
     for section, rows in sections:
-        # Section header with left stripe
         hdr_row = tk.Frame(card, bg=PANEL)
         hdr_row.pack(fill="x", pady=(10, 4))
         tk.Frame(hdr_row, bg=ACCENT, width=3, height=16).pack(side="left", padx=(0, 8))
@@ -445,7 +469,6 @@ def show_controls():
             tk.Label(row, text=action, fg=TEXT, bg=PANEL,
                      font=("Courier New", 9, "bold"), anchor="w").pack(side="left")
 
-    # Tip box
     tip = tk.Frame(win, bg=ACCENT_DIM, padx=14, pady=10)
     tip.pack(padx=20, fill="x")
     tk.Label(tip, text="TIP  Hold open palm for ~0.25s to engage pause.",
@@ -462,64 +485,55 @@ def show_controls():
     _btn_hover(close_btn, PANEL, ACCENT, TEXT_DIM, BG)
 
 
-#main window
+def _count_models() -> int:
+    """
+    Counts available 3D model/point cloud files in models/ folder.
 
+    Returns:
+        int: Total number of valid model files (.glb, .obj, .csv).
+    """
+    if os.path.exists(MODELS_DIR):
+        return len([f for f in os.listdir(MODELS_DIR) if f.lower().endswith((".glb", ".obj", ".csv"))])
+    return 0
+
+
+# Main Window Setup
 root = tk.Tk()
 root.title("3D Interaction Controller")
 root.geometry("620x420")
 root.configure(bg=BG)
 root.resizable(False, False)
 
-# Top accent line
 tk.Frame(root, bg=ACCENT, height=2).pack(fill="x")
 
-# Main layout: left graphic | right content 
 body = tk.Frame(root, bg=BG)
 body.pack(fill="both", expand=True)
 
-# Left panel — animated graphic
 left = tk.Frame(body, bg=BG2, width=180)
 left.pack(side="left", fill="y")
 left.pack_propagate(False)
 
-anim = HeaderCanvas(left, width=180, height=300,
-                    bg=BG2, highlightthickness=0)
+anim = HeaderCanvas(left, width=180, height=300, bg=BG2, highlightthickness=0)
 anim.pack(pady=(30, 0))
 
-# Version / build tag
-tk.Label(left, text="v2.0.0", fg=TEXT_MUTE, bg=BG2,
-         font=FONT_MONO).pack(side="bottom", pady=10)
-tk.Label(left, text="BUILD", fg=TEXT_MUTE, bg=BG2,
-         font=FONT_MONO).pack(side="bottom")
+tk.Label(left, text="v2.0.0", fg=TEXT_MUTE, bg=BG2, font=FONT_MONO).pack(side="bottom", pady=10)
+tk.Label(left, text="BUILD", fg=TEXT_MUTE, bg=BG2, font=FONT_MONO).pack(side="bottom")
 
-# Vertical separator
 tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
 
-# Right panel — title + buttons
 right = tk.Frame(body, bg=BG, padx=36)
 right.pack(side="left", fill="both", expand=True)
 
-# Spacer
 tk.Frame(right, bg=BG, height=40).pack()
 
-# Tag line above title
-tk.Label(right, text="// GESTURE-BASED 3D VIEWER",
-         fg=ACCENT, bg=BG, font=FONT_LABEL, anchor="w").pack(fill="x")
+tk.Label(right, text="// GESTURE-BASED 3D VIEWER", fg=ACCENT, bg=BG, font=FONT_LABEL, anchor="w").pack(fill="x")
 
-# Title
-tk.Label(right, text="3D INTERACTION\nCONTROLLER",
-         fg=TEXT, bg=BG, font=FONT_TITLE,
-         justify="left", anchor="w", pady=4).pack(fill="x")
+tk.Label(right, text="3D INTERACTION\nCONTROLLER", fg=TEXT, bg=BG, font=FONT_TITLE, justify="left", anchor="w", pady=4).pack(fill="x")
 
-# Subtitle
-tk.Label(right, text="Real-time hand gesture control for 3D model viewing",
-         fg=TEXT_DIM, bg=BG, font=FONT_SUB,
-         wraplength=340, justify="left", anchor="w").pack(fill="x", pady=(0, 28))
+tk.Label(right, text="Real-time hand gesture control for 3D model viewing", fg=TEXT_DIM, bg=BG, font=FONT_SUB, wraplength=340, justify="left", anchor="w").pack(fill="x", pady=(0, 28))
 
-# Horizontal rule
 tk.Frame(right, bg=BORDER, height=1).pack(fill="x", pady=(0, 24))
 
-# Buttons
 btn_area = tk.Frame(right, bg=BG)
 btn_area.pack(anchor="w")
 
@@ -549,33 +563,20 @@ ctrl_btn = tk.Button(
 ctrl_btn.grid(row=0, column=1, pady=4)
 _btn_hover(ctrl_btn, PANEL, PANEL2, TEXT_DIM, TEXT)
 
-# Status row
 tk.Frame(right, bg=BG, height=20).pack()
 status_row = tk.Frame(right, bg=BG)
 status_row.pack(anchor="w")
 
-# Models count indicator
-def _count_models():
-    if os.path.exists(MODELS_DIR):
-        n = len([f for f in os.listdir(MODELS_DIR)
-                 if f.lower().endswith((".glb", ".obj", ".csv"))]) # Added .csv
-        return n
-    return 0
+n_models = _count_models()
+dot_color = GREEN if n_models > 0 else ORANGE
+tk.Label(status_row, text="●", fg=dot_color, bg=BG, font=("Courier New", 10)).pack(side="left")
+tk.Label(status_row, text=f"  {n_models} model(s) in models/", fg=TEXT_DIM, bg=BG, font=FONT_MONO).pack(side="left")
 
-n = _count_models()
-dot_color = GREEN if n > 0 else ORANGE
-tk.Label(status_row, text="●", fg=dot_color, bg=BG,
-         font=("Courier New", 10)).pack(side="left")
-tk.Label(status_row, text=f"  {n} model(s) in models/",
-         fg=TEXT_DIM, bg=BG, font=FONT_MONO).pack(side="left")
-
-# Bottom bar
 tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
 foot = tk.Frame(root, bg=BG2, pady=6)
 foot.pack(fill="x")
-tk.Label(foot, text="Place .glb or .obj files in the models/ folder",
-         fg=TEXT_MUTE, bg=BG2, font=FONT_MONO).pack(side="left", padx=16)
-tk.Label(foot, text="[  READY  ]",
-         fg=GREEN, bg=BG2, font=FONT_MONO).pack(side="right", padx=16)
+tk.Label(foot, text="Place .glb or .obj files in the models/ folder", fg=TEXT_MUTE, bg=BG2, font=FONT_MONO).pack(side="left", padx=16)
+tk.Label(foot, text="[  READY  ]", fg=GREEN, bg=BG2, font=FONT_MONO).pack(side="right", padx=16)
 
-root.mainloop()
+if __name__ == "__main__":
+    root.mainloop()

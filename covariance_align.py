@@ -1,11 +1,17 @@
 import numpy as np
 import pandas as pd
 
-def auto_align_up_axis(df):
+def auto_align_up_axis(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculates the covariance matrix to find the flattest plane.
-    Dynamically swaps axes so the flat plane rests on Ursina's X-Z ground,
-    making the Y-axis the height.
+    Calculates the covariance matrix to find the flattest plane of a 3D point cloud.
+    Dynamically swaps axes so the flat plane rests on Ursina's X-Z ground plane,
+    making the Y-axis represent height.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing 3D point coordinates in 'x', 'y', 'z' columns.
+
+    Returns:
+        pd.DataFrame: Aligned copy of the input DataFrame with reoriented axes.
     """
     # 1. Extract just the coordinates as a numpy matrix
     points = df[['x', 'y', 'z']].values
