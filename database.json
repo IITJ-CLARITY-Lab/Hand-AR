@@ -1,6 +1,6 @@
 {
   "query": "car",
-  "timestamp": 1787890157.810458,
+  "timestamp": 1788361948.933183,
   "results": [
     {
       "name": "7365261af0b44c26b66d8272e5158428.glb",
@@ -65,6 +65,12 @@
     {
       "name": "vintage_racing_car.glb",
       "path": "/home/youngoat/Coding/CLARITY_LAB/models/vintage_racing_car.glb",
+      "source": "local",
+      "mode": "inspect"
+    },
+    {
+      "name": "Futuristic_racing_car_-_\"Molnia\".glb",
+      "path": "/home/youngoat/Coding/CLARITY_LAB/models/Futuristic_racing_car_-_\"Molnia\".glb",
       "source": "local",
       "mode": "inspect"
     },
